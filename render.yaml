@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: bhc-blood-donor
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm run build
+    startCommand: node backend/server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://bhc-blood-donor.onrender.com
+      - key: BREVO_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: '"BHC Blood Donor" <cs255214307@bhc.edu.in>'

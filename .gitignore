@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# SQLite DB (Render persistent disk will host this)
+backend/blood_bank.db
+
+# Environment variables
+.env
+backend/.env
+*.env.local
+
+# Build output
+frontend/dist
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads (use Cloudinary in production)
+backend/uploads/
