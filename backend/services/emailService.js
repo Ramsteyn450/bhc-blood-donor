@@ -116,8 +116,9 @@ async function getSmtpTransporter() {
  * Send Email via HTTP API (Brevo REST API / Resend API / SendGrid API) or SMTP Transporter
  */
 async function sendEmail({ to, subject, htmlText, plainText }) {
-  const fromAddress = process.env.EMAIL_FROM || '"BHC Blood Donor" <cs255214307@bhc.edu.in>';
-  const fromEmail = process.env.SMTP_USER || process.env.GMAIL_USER || 'cs255214307@bhc.edu.in';
+  // Use the verified Brevo sender email
+  const fromEmail = process.env.EMAIL_FROM || 'ramachandranramachandran5944@gmail.com';
+  const fromName = 'BHC Blood Donor Network';
 
   // --- OPTION A: Brevo HTTP REST API ---
   if (process.env.BREVO_API_KEY) {
