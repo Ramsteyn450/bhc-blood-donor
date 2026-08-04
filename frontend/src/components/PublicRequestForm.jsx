@@ -266,9 +266,6 @@ export default function PublicRequestForm() {
   const [showCamera, setShowCamera] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
 
-  // File Input Refs for direct native mobile camera vs gallery access
-  const cameraInputRef = useRef(null);
-  const galleryInputRef = useRef(null);
 
   const requestGpsLocation = () => {
     if (!navigator.geolocation) {
@@ -506,24 +503,6 @@ export default function PublicRequestForm() {
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-slate-50 border-x border-slate-200 relative pb-28 animate-fade-in shadow-2xl">
 
-      {/* Hidden Mobile Native Direct Camera Input */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={handleFileInputChange}
-        className="hidden"
-      />
-
-      {/* Hidden Mobile Direct Gallery Input */}
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        onChange={handleFileInputChange}
-        className="hidden"
-      />
 
       {/* Camera Modal Fallback */}
       {showCamera && (
@@ -938,35 +917,39 @@ export default function PublicRequestForm() {
             ) : (
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Direct Mobile Rear Camera Input Trigger */}
-                  <button
-                    type="button"
-                    className="py-3 px-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform"
-                    onClick={() => cameraInputRef.current?.click()}
+                  {/* Direct Camera — label wrapping input for iOS Safari */}
+                  <label
+                    htmlFor="native-camera-input"
+                    className="py-3 px-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-transform cursor-pointer"
                   >
                     <Camera size={16} className="text-red-600" />
                     <span>Take Photo (Camera)</span>
-                  </button>
+                  </label>
+                  <input
+                    id="native-camera-input"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
 
-                  {/* Direct Gallery Input Trigger */}
-                  <button
-                    type="button"
-                    className="py-3 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
-                    onClick={() => galleryInputRef.current?.click()}
+                  {/* Gallery — label wrapping input */}
+                  <label
+                    htmlFor="native-gallery-input"
+                    className="py-3 px-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer"
                   >
                     <ImageIcon size={16} className="text-slate-600" />
                     <span>Choose Gallery</span>
-                  </button>
+                  </label>
+                  <input
+                    id="native-gallery-input"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
                 </div>
-
-                {/* Optional Web Camera Modal Scanner for Laptops/PCs */}
-                <button
-                  type="button"
-                  onClick={() => setShowCamera(true)}
-                  className="text-[11px] text-slate-500 hover:text-slate-800 font-semibold underline pt-1 block mx-auto"
-                >
-                  Use Browser Live Scanner
-                </button>
               </div>
             )}
           </div>

@@ -34,31 +34,7 @@ function Navigation({ token, user, onLogout }) {
             </div>
           </Link>
 
-          {/* Navigation Toggle — Clean Sleek Pills without double-border artifacts */}
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <Link
-              to="/"
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 border ${
-                !isAdmin
-                  ? 'bg-[#d4af37] text-slate-900 border-amber-300 font-extrabold shadow-md'
-                  : 'bg-[#111c35]/80 text-slate-300 border-slate-700/60 hover:text-white hover:bg-[#162447]'
-              }`}
-            >
-              <QrCode size={15} />
-              <span>Blood Request Form</span>
-            </Link>
-            <Link
-              to="/admin"
-              className={`px-4 py-2 rounded-xl transition flex items-center gap-2 border ${
-                isAdmin
-                  ? 'bg-[#d4af37] text-slate-900 border-amber-300 font-extrabold shadow-md'
-                  : 'bg-[#111c35]/80 text-slate-300 border-slate-700/60 hover:text-white hover:bg-[#162447]'
-              }`}
-            >
-              <ShieldCheck size={15} />
-              <span>College Admin Portal</span>
-            </Link>
-          </div>
+          {/* No public nav buttons — Admin portal accessible only via /admin URL */}
         </div>
       </div>
     </header>
