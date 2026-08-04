@@ -7,7 +7,8 @@
     "seed": "node backend/seed.js",
     "backend": "node backend/server.js",
     "frontend": "npm run dev --prefix frontend",
-    "start": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "start": "node backend/server.js",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "build": "npm install --prefix backend && npm install --include=dev --prefix frontend && npm run build --prefix frontend"
   },
   "devDependencies": {
