@@ -58,6 +58,32 @@ app.use('/api', apiLimiter);
 
 // Multer Disk Storage Config (fallback & local storage)
 const uploadDir = path.join(__dirname, 'uploads', 'proofs');
+
+// Database Health & Diagnostic Endpoint
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const reqCount = await db.get('SELECT COUNT(*) as count FROM blood_requests');
+    const hospCount = await db.get('SELECT COUNT(*) as count FROM hospitals');
+    const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
+    const auditCount = await db.get('SELECT COUNT(*) as count FROM audit_log');
+
+    res.json({
+      status: 'ONLINE',
+      dbPath: db.dbPath,
+      environmentDbPath: process.env.DB_PATH || 'Not set',
+      persistentDiskActive: !!process.env.DB_PATH,
+      recordCounts: {
+        blood_requests: reqCount ? reqCount.count : 0,
+        hospitals: hospCount ? hospCount.count : 0,
+        admins: adminCount ? adminCount.count : 0,
+        audit_log: auditCount ? auditCount.count : 0
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'ERROR', error: err.message });
+  }
+});
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

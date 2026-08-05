@@ -1,17 +1,39 @@
+const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const dbPath = path.join(__dirname, 'blood_bank.db');
+
+// Support process.env.DB_PATH (e.g., Render Persistent Disk /data/blood_bank.db)
+const defaultDbDir = __dirname;
+const dbPath = process.env.DB_PATH || path.join(defaultDbDir, 'blood_bank.db');
+
+// Ensure target database directory exists
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+
+console.log(`\n======================================================`);
+console.log(`🗄️  [SQLITE DATABASE CONFIGURATION]`);
+console.log(`   Runtime Database File Path: ${dbPath}`);
+console.log(`   Environment DB_PATH:       ${process.env.DB_PATH || 'Not set (using local directory)'}`);
+console.log(`======================================================\n`);
 
 const db = new sqlite3.Database(dbPath);
 
-// Promised database query helpers
+// Promised database query helpers with detailed operation logging
 function run(sql, params = [], silent = false) {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
     db.run(sql, params, function (err) {
+      const duration = Date.now() - startTime;
       if (err) {
-        if (!silent) console.error('SQL Run Error:', err.message, '\nQuery:', sql);
+        if (!silent) console.error(`❌ [SQL RUN ERROR] (${duration}ms):`, err.message, '\n   Query:', sql);
         reject(err);
       } else {
+        const opType = sql.trim().split(' ')[0].toUpperCase();
+        if (!silent && (opType === 'INSERT' || opType === 'UPDATE' || opType === 'DELETE')) {
+          console.log(`✔ [SQL ${opType}] (${duration}ms) LastID: ${this.lastID}, Changes: ${this.changes}`);
+        }
         resolve({ id: this.lastID, changes: this.changes });
       }
     });
@@ -20,9 +42,11 @@ function run(sql, params = [], silent = false) {
 
 function get(sql, params = []) {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
     db.get(sql, params, (err, row) => {
+      const duration = Date.now() - startTime;
       if (err) {
-        console.error('SQL Get Error:', err.message, '\nQuery:', sql);
+        console.error(`❌ [SQL GET ERROR] (${duration}ms):`, err.message, '\n   Query:', sql);
         reject(err);
       } else {
         resolve(row);
@@ -33,9 +57,11 @@ function get(sql, params = []) {
 
 function all(sql, params = []) {
   return new Promise((resolve, reject) => {
+    const startTime = Date.now();
     db.all(sql, params, (err, rows) => {
+      const duration = Date.now() - startTime;
       if (err) {
-        console.error('SQL All Error:', err.message, '\nQuery:', sql);
+        console.error(`❌ [SQL ALL ERROR] (${duration}ms):`, err.message, '\n   Query:', sql);
         reject(err);
       } else {
         resolve(rows);
@@ -300,4 +326,4 @@ async function initDb() {
   console.log('Database initialized with migrations, Trichy hospital seeds and indexes.');
 }
 
-module.exports = { db, run, get, all, logAction, initDb };
+module.exports = { db, dbPath, run, get, all, logAction, initDb };
