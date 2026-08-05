@@ -728,36 +728,94 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
       status: finalStatus
     });
 
-    // Send email asynchronously in background so response returns instantly
-    if (finalStatus === 'Request Received' && request.relative_email) {
-      const emailSubject = 'BHC Blood Donor – Blood Request Approved & Received';
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-          <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
-            <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
-            <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">Autonomous · Tiruchirappalli</p>
-          </div>
-          <div style="padding: 20px; background-color: #ffffff;">
-            <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">Blood Request Received</h2>
-            <p style="font-size: 13px; color: #334155;">Dear <strong>${request.relative_name}</strong>,</p>
-            <p style="font-size: 13px; color: #334155;">Your blood request for <strong>${request.patient_name}</strong> (${request.blood_type}) at <strong>${request.delivery_address || 'Hospital'}</strong> has been reviewed and marked as <strong>Request Received</strong> by the BHC Administration.</p>
-            <p style="font-size: 13px; color: #334155;">Our NSS student volunteer coordinator will contact you directly on <strong>${request.relative_contact}</strong> if an eligible donor is available.</p>
-          </div>
-          <div style="background-color: #f1f5f9; padding: 12px; text-align: center; font-size: 10px; color: #64748b;">
-            © Bishop Heber College (Autonomous) · Tiruchirappalli
-          </div>
-        </div>
-      `;
+    // Trigger Automated Email Notifications Asynchronously (Non-blocking)
+    if (request.relative_email && oldStatus !== finalStatus) {
+      let emailSubject = '';
+      let emailHtml = '';
+      let emailPlain = '';
 
-      sendEmail({
-        to: request.relative_email,
-        subject: emailSubject,
-        htmlText: emailHtml
-      }).then(mailRes => {
-        if (mailRes && mailRes.success) console.log(`✔ [STATUS BG EMAIL] Sent to ${request.relative_email}`);
-      }).catch(mailErr => {
-        console.error(`❌ [STATUS UPDATE EMAIL ERROR]:`, mailErr.message);
-      });
+      if (finalStatus === 'Request Received' || finalStatus === 'REQUEST_RECEIVED') {
+        emailSubject = 'BHC Blood Donor – Request Received';
+        emailPlain = `Dear Sir/Madam,\n\nYour blood request has been successfully received by the Bishop Heber College Blood Donor Team.\n\nPlease note that your request has been received but has NOT yet been approved.\n\nOur College Administration will verify the submitted details.\n\nIf everything is valid, the request will be processed through the existing NSS blood donation procedure.\n\nOnce a student volunteer is available, you will be contacted using the mobile number you provided.\n\nCollege Working Hours:\nMonday – Friday\n10:00 AM – 4:00 PM\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+
+        emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+            <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #d4af37;">
+              <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
+              <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+            </div>
+            <div style="padding: 28px; color: #1e293b;">
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been successfully received by the Bishop Heber College Blood Donor Team.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that your request has been received but has <strong>NOT yet been approved</strong>.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Our College Administration will verify the submitted details.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">If everything is valid, the request will be processed through the existing NSS blood donation procedure.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Once a student volunteer is available, you will be contacted using the mobile number you provided.</p>
+              
+              <div style="background-color: #f8fafc; border-left: 4px solid #0a1428; padding: 14px; margin: 20px 0; border-radius: 6px; border: 1px solid #e2e8f0;">
+                <p style="margin: 0; font-size: 12px; font-weight: bold; color: #0a1428; text-transform: uppercase;">College Working Hours:</p>
+                <p style="margin: 4px 0 0 0; font-size: 13px; color: #475569; font-weight: 500;">Monday – Friday<br>10:00 AM – 4:00 PM</p>
+              </div>
+
+              <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
+                Thank you,<br>
+                <strong>BHC Blood Donor</strong><br>
+                Bishop Heber College (Autonomous)
+              </p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+              © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
+            </div>
+          </div>
+        `;
+      } else if (finalStatus === 'APPROVED' || finalStatus === 'Approved') {
+        emailSubject = 'BHC Blood Donor – Request Approved';
+        emailPlain = `Dear Sir/Madam,\n\nYour blood request has been approved by the College Administration.\n\nThe request has now been forwarded through the College NSS process.\n\nStudent volunteers will be informed through the existing college procedure.\n\nIf any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.\n\nPlease note that blood donation depends on student availability and willingness.\n\nThank you for your patience.\n\nRegards,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+
+        emailHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+            <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #16a34a;">
+              <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
+              <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+            </div>
+            <div style="padding: 28px; color: #1e293b;">
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been <strong>approved by the College Administration</strong>.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">The request has now been forwarded through the College NSS process.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Student volunteers will be informed through the existing college procedure.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">If any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.</p>
+              <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that blood donation depends on student availability and willingness.</p>
+
+              <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
+                Thank you for your patience.<br><br>
+                Regards,<br>
+                <strong>BHC Blood Donor</strong><br>
+                Bishop Heber College (Autonomous)
+              </p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+              © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
+            </div>
+          </div>
+        `;
+      }
+
+      if (emailSubject && emailHtml) {
+        sendEmail({
+          to: request.relative_email,
+          subject: emailSubject,
+          htmlText: emailHtml,
+          plainText: emailPlain
+        }).then(mailRes => {
+          if (mailRes && mailRes.success) {
+            console.log(`✔ [STATUS NOTIFICATION SUCCESS] Dispatched "${emailSubject}" to ${request.relative_email} for REQ-${requestId}`);
+          } else {
+            console.error(`❌ [STATUS NOTIFICATION ERROR] Delivery failed for REQ-${requestId} to ${request.relative_email}:`, mailRes);
+          }
+        }).catch(mailErr => {
+          console.error(`❌ [STATUS NOTIFICATION EXCEPTION] Error sending email for REQ-${requestId}:`, mailErr.message);
+        });
+      }
     }
 
   } catch (error) {
