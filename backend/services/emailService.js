@@ -116,9 +116,20 @@ async function getSmtpTransporter() {
  * Send Email via HTTP API (Brevo REST API / Resend API / SendGrid API) or SMTP Transporter
  */
 async function sendEmail({ to, subject, htmlText, plainText }) {
-  // Use the verified Brevo sender email
-  const fromEmail = process.env.EMAIL_FROM || 'ramachandranramachandran5944@gmail.com';
-  const fromName = 'BHC Blood Donor Network';
+  const rawSender = process.env.EMAIL_FROM || 'ramachandranramachandran5944@gmail.com';
+  let fromEmail = rawSender.trim();
+  let fromName = 'BHC Blood Donor Network';
+
+  if (rawSender.includes('<') && rawSender.includes('>')) {
+    const match = rawSender.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
+    if (match) {
+      if (match[1]) fromName = match[1].trim();
+      fromEmail = match[2].trim();
+    }
+  }
+  const fromAddress = `"${fromName}" <${fromEmail}>`;
+
+  let lastError = '';
 
   // --- OPTION A: Brevo HTTP REST API ---
   if (process.env.BREVO_API_KEY) {
@@ -128,10 +139,10 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         headers: {
           'accept': 'application/json',
           'content-type': 'application/json',
-          'api-key': process.env.BREVO_API_KEY
+          'api-key': process.env.BREVO_API_KEY.trim()
         },
         body: JSON.stringify({
-          sender: { name: 'BHC Blood Donor', email: fromEmail },
+          sender: { name: fromName, email: fromEmail },
           to: [{ email: to }],
           subject: subject,
           htmlContent: htmlText
@@ -143,9 +154,11 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         console.log(`✔ [BREVO API SUCCESS] Email dispatched to ${to} | MessageID: ${resData.messageId}`);
         return { success: true, provider: 'Brevo API', messageId: resData.messageId };
       } else {
+        lastError = `Brevo API (${response.status}): ${resData.message || JSON.stringify(resData)}`;
         console.error(`❌ [BREVO API ERROR]:`, resData);
       }
     } catch (apiErr) {
+      lastError = `Brevo API Fetch Error: ${apiErr.message}`;
       console.error(`❌ [BREVO API FETCH ERROR]:`, apiErr.message);
     }
   }
@@ -157,7 +170,7 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'authorization': `Bearer ${process.env.RESEND_API_KEY}`
+          'authorization': `Bearer ${process.env.RESEND_API_KEY.trim()}`
         },
         body: JSON.stringify({
           from: fromAddress,
@@ -172,9 +185,11 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         console.log(`✔ [RESEND API SUCCESS] Email dispatched to ${to} | ID: ${resData.id}`);
         return { success: true, provider: 'Resend API', messageId: resData.id };
       } else {
+        lastError = `Resend API: ${resData.message || JSON.stringify(resData)}`;
         console.error(`❌ [RESEND API ERROR]:`, resData);
       }
     } catch (apiErr) {
+      lastError = `Resend API Fetch Error: ${apiErr.message}`;
       console.error(`❌ [RESEND API FETCH ERROR]:`, apiErr.message);
     }
   }
@@ -186,11 +201,11 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'authorization': `Bearer ${process.env.SENDGRID_API_KEY}`
+          'authorization': `Bearer ${process.env.SENDGRID_API_KEY.trim()}`
         },
         body: JSON.stringify({
           personalizations: [{ to: [{ email: to }] }],
-          from: { email: fromEmail, name: 'BHC Blood Donor' },
+          from: { email: fromEmail, name: fromName },
           subject: subject,
           content: [{ type: 'text/html', value: htmlText }]
         })
@@ -201,32 +216,39 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
         return { success: true, provider: 'SendGrid API' };
       } else {
         const errText = await response.text();
+        lastError = `SendGrid API: ${errText}`;
         console.error(`❌ [SENDGRID API ERROR]:`, errText);
       }
     } catch (apiErr) {
+      lastError = `SendGrid API Fetch Error: ${apiErr.message}`;
       console.error(`❌ [SENDGRID API FETCH ERROR]:`, apiErr.message);
     }
   }
 
   // --- OPTION D: Nodemailer SMTP Transporter ---
-  const transporter = await getSmtpTransporter();
-  if (transporter) {
-    const info = await transporter.sendMail({
-      from: fromAddress,
-      to,
-      subject,
-      html: htmlText,
-      text: plainText
-    });
+  try {
+    const transporter = await getSmtpTransporter();
+    if (transporter) {
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject,
+        html: htmlText,
+        text: plainText
+      });
 
-    console.log(`✔ [SMTP DISPATCH SUCCESS] Email sent to: ${to} | MessageID: ${info.messageId}`);
-    if (nodemailer.getTestMessageUrl && info) {
-      console.log('   Ethereal Preview URL:', nodemailer.getTestMessageUrl(info));
+      console.log(`✔ [SMTP DISPATCH SUCCESS] Email sent to: ${to} | MessageID: ${info.messageId}`);
+      if (nodemailer.getTestMessageUrl && info) {
+        console.log('   Ethereal Preview URL:', nodemailer.getTestMessageUrl(info));
+      }
+      return { success: true, provider: 'SMTP', messageId: info.messageId };
     }
-    return { success: true, provider: 'SMTP', messageId: info.messageId };
+  } catch (smtpErr) {
+    lastError = `SMTP Error: ${smtpErr.message}`;
+    console.error(`❌ [SMTP DISPATCH ERROR]:`, smtpErr.message);
   }
 
-  throw new Error('No email provider or SMTP transporter available.');
+  throw new Error(lastError || 'No email provider or SMTP transporter available.');
 }
 
 /**

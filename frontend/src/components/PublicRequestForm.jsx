@@ -438,10 +438,10 @@ export default function PublicRequestForm() {
           urgency: form.urgency
         });
       } else {
-        alert(`Submission Error: ${data.message}`);
+        alert(`Submission Error: ${data.message || data.error || 'Server error occurred during submission.'}`);
       }
-    } catch {
-      alert('Network error during submission.');
+    } catch (err) {
+      alert(`Network Error: ${err.message || 'Connecting to server failed.'}`);
     } finally {
       setSubmitting(false);
     }

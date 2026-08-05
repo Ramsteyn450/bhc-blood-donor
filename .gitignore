@@ -2,8 +2,8 @@
 node_modules/
 */node_modules/
 
-# SQLite DB (Render persistent disk will host this)
-backend/blood_bank.db
+# SQLite DB
+backend/blood_bank.db*
 
 # Environment variables
 .env
