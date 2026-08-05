@@ -17,6 +17,7 @@ const cloudinary = require('cloudinary').v2;
 const db = require('./database');
 const { saveRequestToBackup } = require('./services/backupService');
 const { BloodRequest, Hospital, Admin, AuditLog, getNextRequestId } = require('./services/mongoService');
+const { sendEmail, verifyEmailService } = require('./services/emailService');
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -529,8 +530,6 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ message: 'Server error during login' });
   }
 });
-
-const { sendEmail, verifyEmailService } = require('./services/emailService');
 
 // In-memory OTP store with 10-minute expiration & 60s resend cooldown
 // Key: lowercase email, Value: { otp, expiresAt, lastSentAt }
