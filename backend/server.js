@@ -269,50 +269,46 @@ app.post('/api/public/requests', async (req, res) => {
       created_at: new Date().toISOString()
     });
 
-    let emailSentNotice = '';
-    if (relative_email) {
-      try {
-        const confirmHtml = `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-            <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
-              <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
-              <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">Autonomous · Tiruchirappalli</p>
-            </div>
-            <div style="padding: 20px; background-color: #ffffff;">
-              <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">Emergency Blood Request Received</h2>
-              <p style="font-size: 13px; color: #334155;">Dear <strong>${relative_name}</strong>,</p>
-              <p style="font-size: 13px; color: #334155;">Your emergency blood request for patient <strong>${patient_name}</strong> (${blood_type}, ${quantity} Units) at <strong>${hospital_name}</strong> has been received by the Bishop Heber College Blood Donor Network.</p>
-              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin: 15px 0;">
-                <div><strong>Request Reference ID:</strong> REQ-${result.id}</div>
-                <div><strong>Hospital:</strong> ${hospital_name} (${doctor_department || 'Emergency'})</div>
-                <div><strong>Blood Group:</strong> ${blood_type} (${urgency} Urgency)</div>
-              </div>
-              <p style="font-size: 12px; color: #64748b;">Our College Administrator is reviewing the request for NSS volunteer dispatch. If approved, available student volunteers will contact you directly.</p>
-            </div>
-            <div style="background-color: #f1f5f9; padding: 12px; text-align: center; font-size: 10px; color: #64748b;">
-              © Bishop Heber College (Autonomous) · Tiruchirappalli
-            </div>
-          </div>
-        `;
-        const mailRes = await sendEmail({
-          to: relative_email,
-          subject: `BHC Blood Request Received [REQ-${result.id}] - ${patient_name} (${blood_type})`,
-          htmlText: confirmHtml
-        });
-        if (mailRes && mailRes.success) {
-          emailSentNotice = ` Confirmation email sent to ${relative_email}.`;
-        }
-      } catch (mailErr) {
-        console.error(`❌ [PUBLIC REQUEST EMAIL DISPATCH ERROR]:`, mailErr.message);
-        emailSentNotice = ` Email notification could not be delivered: ${mailErr.message}`;
-      }
-    }
-
     res.status(201).json({
       request_id: result.id,
       request_uuid: requestUuid,
-      message: `Blood request submitted successfully.${emailSentNotice}`
+      message: 'Blood request submitted successfully. The College Administrator has been notified.'
     });
+
+    // Send confirmation email asynchronously in background so client receives instant response
+    if (relative_email) {
+      const confirmHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+          <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
+            <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
+            <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">Autonomous · Tiruchirappalli</p>
+          </div>
+          <div style="padding: 20px; background-color: #ffffff;">
+            <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">Emergency Blood Request Received</h2>
+            <p style="font-size: 13px; color: #334155;">Dear <strong>${relative_name}</strong>,</p>
+            <p style="font-size: 13px; color: #334155;">Your emergency blood request for patient <strong>${patient_name}</strong> (${blood_type}, ${quantity} Units) at <strong>${hospital_name}</strong> has been received by the Bishop Heber College Blood Donor Network.</p>
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin: 15px 0;">
+              <div><strong>Request Reference ID:</strong> REQ-${result.id}</div>
+              <div><strong>Hospital:</strong> ${hospital_name} (${doctor_department || 'Emergency'})</div>
+              <div><strong>Blood Group:</strong> ${blood_type} (${urgency} Urgency)</div>
+            </div>
+            <p style="font-size: 12px; color: #64748b;">Our College Administrator is reviewing the request for NSS volunteer dispatch. If approved, available student volunteers will contact you directly.</p>
+          </div>
+          <div style="background-color: #f1f5f9; padding: 12px; text-align: center; font-size: 10px; color: #64748b;">
+            © Bishop Heber College (Autonomous) · Tiruchirappalli
+          </div>
+        </div>
+      `;
+      sendEmail({
+        to: relative_email,
+        subject: `BHC Blood Request Received [REQ-${result.id}] - ${patient_name} (${blood_type})`,
+        htmlText: confirmHtml
+      }).then(mailRes => {
+        if (mailRes && mailRes.success) console.log(`✔ [BG EMAIL SUCCESS] Dispatched to ${relative_email}`);
+      }).catch(mailErr => {
+        console.error(`❌ [PUBLIC REQUEST BG EMAIL DISPATCH ERROR]:`, mailErr.message);
+      });
+    }
 
   } catch (error) {
     console.error('Error submitting public blood request:', error);
