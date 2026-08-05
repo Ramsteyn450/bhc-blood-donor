@@ -100,11 +100,13 @@ async function getSmtpTransporter() {
       host: 'smtp.ethereal.email',
       port: 587,
       secure: false,
-      auth: { user: testAccount.user, pass: testAccount.pass }
+      auth: { user: testAccount.user, pass: testAccount.pass },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 4000
     });
     console.log(`⚠️ [EMAIL SERVICE NOTICE] No production SMTP/API key found in .env.`);
     console.log(`   Initialized Ethereal Test Transporter: ${testAccount.user}`);
-    console.log(`   OTPs will be logged directly to the server console.`);
   } catch (err) {
     console.error('❌ [EMAIL SERVICE ERROR] Ethereal fallback failed:', err.message);
   }

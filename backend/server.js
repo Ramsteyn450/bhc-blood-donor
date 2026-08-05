@@ -680,8 +680,29 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
       [finalStatus, id, requestId]
     );
 
-    // If Request Received, trigger email to relative
-    let emailSentNotice = '';
+    await db.logAction({
+      action: `Request status updated to ${finalStatus} by College Admin`,
+      requestId,
+      actorRole: 'College Administrator',
+      actorId: id,
+      oldValue: oldStatus,
+      newValue: finalStatus
+    });
+
+    emitEvent('request:status_changed', {
+      requestId,
+      status: finalStatus,
+      updated_by: name,
+      relative_email: request.relative_email,
+      timestamp: new Date().toISOString()
+    });
+
+    res.json({
+      message: `Blood request REQ-${requestId} status updated to "${finalStatus}".`,
+      status: finalStatus
+    });
+
+    // Send email asynchronously in background so response returns instantly
     if (finalStatus === 'Request Received' && request.relative_email) {
       const emailSubject = 'BHC Blood Donor – Blood Request Approved & Received';
       const emailHtml = `
@@ -702,42 +723,16 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
         </div>
       `;
 
-      try {
-        const mailRes = await sendEmail({
-          to: request.relative_email,
-          subject: emailSubject,
-          htmlText: emailHtml
-        });
-        if (mailRes && mailRes.success) {
-          emailSentNotice = ` Automated email sent to relative (${request.relative_email}).`;
-        }
-      } catch (mailErr) {
+      sendEmail({
+        to: request.relative_email,
+        subject: emailSubject,
+        htmlText: emailHtml
+      }).then(mailRes => {
+        if (mailRes && mailRes.success) console.log(`✔ [STATUS BG EMAIL] Sent to ${request.relative_email}`);
+      }).catch(mailErr => {
         console.error(`❌ [STATUS UPDATE EMAIL ERROR]:`, mailErr.message);
-        emailSentNotice = ` (Email failed to send: ${mailErr.message})`;
-      }
+      });
     }
-
-    await db.logAction({
-      action: `Request status updated to ${finalStatus} by College Admin`,
-      requestId,
-      actorRole: 'College Administrator',
-      actorId: id,
-      oldValue: oldStatus,
-      newValue: finalStatus
-    });
-
-    emitEvent('request:status_changed', {
-      requestId,
-      status: finalStatus,
-      updated_by: name,
-      relative_email: request.relative_email,
-      timestamp: new Date().toISOString()
-    });
-
-    res.json({
-      message: `Blood request REQ-${requestId} status updated to "${finalStatus}".${emailSentNotice}`,
-      status: finalStatus
-    });
 
   } catch (error) {
     console.error('Error updating status:', error);
