@@ -1,44 +1,163 @@
-import React from 'react';
-import { Download, Printer, X, ShieldCheck, Heart } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Download, Printer, Share2, X, ShieldCheck, Loader } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import BhcCrestLogo from './BhcCrestLogo';
 
 export default function PdfDownloadModal({ request, onClose }) {
+  const [downloading, setDownloading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const printableRef = useRef(null);
+
   if (!request) return null;
 
+  // 1. DOWNLOAD PDF: Generates BHC_Blood_Request_<ID>.pdf directly (NO print dialog!)
+  const handleDownloadPdf = async () => {
+    if (!printableRef.current) return;
+    setDownloading(true);
+    try {
+      const element = printableRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth - 16; // 8mm margins left/right
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', 8, 8, imgWidth, Math.min(imgHeight, pdfHeight - 16));
+      pdf.save(`BHC_Blood_Request_${request.request_id || 1}.pdf`);
+    } catch (err) {
+      console.error('PDF Generation Error:', err);
+      alert('Error generating PDF file. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // 2. PRINT PDF: Opens browser print dialog directly (NO file download!)
   const handlePrintPdf = () => {
     window.print();
   };
 
+  // 3. SHARE REQUEST: Native Web Share API or JPG Card + Text Clipboard Fallback
+  const handleShareRequest = async () => {
+    setSharing(true);
+    try {
+      const reqId = request.request_id || 1;
+      const shareText = 
+`🩸 BHC EMERGENCY BLOOD REQUEST [REQ-${reqId}]
+----------------------------------------
+Hospital: ${request.hospital_name || 'Hospital'} (${request.doctor_department || 'Emergency'})
+Patient Name: ${request.patient_name || 'Patient'} (${request.patient_age || ''} yrs, ${request.patient_gender || 'Male'})
+Blood Group: ${request.blood_type || ''} (${request.quantity || 1} Units)
+Emergency Level: ${request.urgency || 'CRITICAL'}
+Relative Contact: ${request.relative_contact || ''} (${request.relative_name || 'Relative'})
+${request.latitude && request.longitude ? `Location: https://maps.google.com/?q=${request.latitude},${request.longitude}` : ''}
+Date: ${new Date(request.created_at || Date.now()).toLocaleDateString('en-IN')}
+
+Bishop Heber College Blood Donor Network · Tiruchirappalli`;
+
+      let shareFile = null;
+      if (printableRef.current) {
+        try {
+          const canvas = await html2canvas(printableRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+          if (blob) {
+            shareFile = new File([blob], `BHC_Blood_Request_Card_REQ-${reqId}.jpg`, { type: 'image/jpeg' });
+          }
+        } catch (imgErr) {
+          console.log('Share card creation fallback:', imgErr);
+        }
+      }
+
+      if (navigator.share) {
+        const shareData = {
+          title: `BHC Blood Request [REQ-${reqId}]`,
+          text: shareText
+        };
+        if (shareFile && navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+          shareData.files = [shareFile];
+        }
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        if (shareFile) {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(shareFile);
+          a.download = shareFile.name;
+          a.click();
+        }
+        alert('Request summary copied to clipboard & JPG card downloaded! Share on WhatsApp / Social Media.');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        alert(`Share Error: ${err.message}`);
+      }
+    } finally {
+      setSharing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 flex justify-center items-center">
-      <div className="bg-white text-slate-900 w-full max-w-2xl rounded-2xl p-8 shadow-2xl printable-sheet relative space-y-6">
+      <div className="bg-white text-slate-900 w-full max-w-2xl rounded-2xl p-6 shadow-2xl printable-sheet relative space-y-5 my-4">
 
-        {/* Dual Action Controls (Hidden on print) */}
-        <div className="no-print flex justify-between items-center pb-4 border-b border-slate-200">
+        {/* Triple Action Control Bar (Hidden on print) */}
+        <div className="no-print flex flex-wrap justify-between items-center pb-3 border-b border-slate-200 gap-2">
           <div className="flex items-center gap-2 text-[#0a1428] font-black text-sm">
-            <ShieldCheck size={18} className="text-[#d4af37]" /> Official Request Summary PDF
+            <ShieldCheck size={18} className="text-[#d4af37]" /> Official Request Summary Document
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Action 1: Download PDF File */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow active:scale-95 transition"
+            >
+              {downloading ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
+              <span>Download PDF</span>
+            </button>
+
+            {/* Action 2: Direct Print Browser Dialog */}
             <button
               onClick={handlePrintPdf}
-              className="btn btn-primary text-xs px-4 py-2 gap-1.5 shadow"
+              className="bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow active:scale-95 transition"
             >
-              <Download size={14} /> Download PDF
+              <Printer size={14} />
+              <span>Print PDF</span>
             </button>
+
+            {/* Action 3: Native Web Share API */}
             <button
-              onClick={handlePrintPdf}
-              className="btn btn-outline text-xs px-3 py-2 gap-1.5"
+              onClick={handleShareRequest}
+              disabled={sharing}
+              className="bg-[#b45309] hover:bg-[#92400e] text-white font-extrabold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow active:scale-95 transition"
             >
-              <Printer size={14} /> Print Sheet
+              {sharing ? <Loader size={14} className="animate-spin" /> : <Share2 size={14} />}
+              <span>Share Request</span>
             </button>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-900 p-1">
-              <X size={20} />
+
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-900 p-1.5 rounded-lg border border-slate-200">
+              <X size={18} />
             </button>
           </div>
         </div>
 
-        {/* PRINTABLE PDF CONTENT (FITS EXACTLY 1 A4 PAGE) */}
-        <div className="space-y-3.5 border border-slate-300 p-5 rounded-xl bg-white text-slate-900 printable-sheet">
+        {/* PRINTABLE PDF CONTENT (SINGLE PAGE A4 SHEET) */}
+        <div ref={printableRef} className="space-y-3.5 border border-slate-300 p-5 rounded-xl bg-white text-slate-900 printable-sheet">
 
           {/* BHC Official Header */}
           <div className="flex justify-between items-start border-b-2 border-[#0a1428] pb-2.5">
@@ -53,7 +172,7 @@ export default function PdfDownloadModal({ request, onClose }) {
             <div className="text-right">
               <div className="text-sm font-extrabold text-slate-900">REQ-{request.request_id}</div>
               <div className="text-[9px] text-slate-500 font-mono">UUID: {request.request_uuid ? request.request_uuid.slice(0, 18) + '...' : '—'}</div>
-              <div className="text-[10px] text-slate-600 font-semibold">{new Date(request.created_at).toLocaleString('en-IN')}</div>
+              <div className="text-[10px] text-slate-600 font-semibold">{new Date(request.created_at || Date.now()).toLocaleString('en-IN')}</div>
             </div>
           </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Heart, Building, User, Phone, FileText, Camera, Upload, CheckCircle,
-  AlertTriangle, Clock, Droplets, ShieldCheck, QrCode, X, Loader, Globe, MapPin, Mail, ChevronRight, Home, Info, RefreshCw, Image as ImageIcon
+  AlertTriangle, Clock, Droplets, ShieldCheck, QrCode, X, Loader, Globe, MapPin, Mail, ChevronRight, Home, Info, RefreshCw, Image as ImageIcon, Share2
 } from 'lucide-react';
 import BhcCrestLogo from './BhcCrestLogo';
 
@@ -449,6 +449,36 @@ export default function PublicRequestForm() {
 
   // SUCCESS RECEIPT VIEW (MOBILE APP STYLE)
   if (submittedData) {
+    const handleShareSuccessRequest = async () => {
+      try {
+        const shareText = 
+`🩸 BHC EMERGENCY BLOOD REQUEST [REQ-${submittedData.requestId}]
+----------------------------------------
+Hospital: ${submittedData.hospitalName || 'Hospital'}
+Patient Name: ${submittedData.patientName || 'Patient'}
+Blood Group: ${submittedData.bloodType || ''} (${submittedData.urgency || 'CRITICAL'} Urgency)
+Relative Contact: ${form.relative_contact || ''} (${form.relative_name || 'Relative'})
+${location.latitude && location.longitude ? `Location: https://maps.google.com/?q=${location.latitude},${location.longitude}` : ''}
+Date: ${new Date().toLocaleDateString('en-IN')}
+
+Bishop Heber College Blood Donor Network · Tiruchirappalli`;
+
+        if (navigator.share) {
+          await navigator.share({
+            title: `BHC Blood Request [REQ-${submittedData.requestId}]`,
+            text: shareText
+          });
+        } else {
+          await navigator.clipboard.writeText(shareText);
+          alert('Request summary copied to clipboard! You can paste and share on WhatsApp or social media.');
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          alert(`Share Error: ${err.message}`);
+        }
+      }
+    };
+
     return (
       <div className="w-full max-w-md mx-auto min-h-screen bg-slate-50 border-x border-slate-200 p-4 my-0 animate-fade-in flex flex-col justify-between">
         <div className="bg-white border border-slate-200 rounded-3xl p-6 text-center shadow-xl space-y-5 mt-4">
@@ -486,6 +516,16 @@ export default function PublicRequestForm() {
             <AlertTriangle size={18} className="shrink-0 text-amber-600 mt-0.5" />
             <div className="text-[11px] leading-relaxed font-medium">{t.workflowNotice}</div>
           </div>
+
+          {/* Share Request Button */}
+          <button
+            type="button"
+            onClick={handleShareSuccessRequest}
+            className="w-full py-3.5 bg-[#b45309] hover:bg-[#92400e] text-white font-black text-xs rounded-2xl shadow flex items-center justify-center gap-2 active:scale-95 transition"
+          >
+            <Share2 size={16} />
+            <span>Share Request (WhatsApp / Apps)</span>
+          </button>
         </div>
 
         <div className="my-6">
