@@ -15,6 +15,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cloudinary = require('cloudinary').v2;
 const db = require('./database');
+const { saveRequestToBackup } = require('./services/backupService');
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -292,6 +293,32 @@ app.post('/api/public/requests', async (req, res) => {
       urgency,
       latitude,
       longitude,
+      created_at: new Date().toISOString()
+    });
+
+    saveRequestToBackup({
+      request_id: result.id,
+      request_uuid: requestUuid,
+      hospital_id: hospitalId,
+      hospital_name,
+      doctor_department,
+      patient_name,
+      patient_age,
+      patient_gender,
+      blood_type,
+      quantity,
+      urgency,
+      needed_by,
+      relative_name,
+      relative_relation,
+      relative_contact,
+      relative_alternate_contact,
+      relative_email,
+      reason,
+      proof_prescription,
+      latitude,
+      longitude,
+      status: 'PENDING',
       created_at: new Date().toISOString()
     });
 
@@ -721,6 +748,12 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
       updated_by: name,
       relative_email: request.relative_email,
       timestamp: new Date().toISOString()
+    });
+
+    saveRequestToBackup({
+      ...request,
+      status: finalStatus,
+      updated_at: new Date().toISOString()
     });
 
     res.json({

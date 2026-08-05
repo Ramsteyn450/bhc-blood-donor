@@ -324,6 +324,14 @@ async function initDb() {
   } catch (adminErr) { /* skip if exists */ }
 
   console.log('Database initialized with migrations, Trichy hospital seeds and indexes.');
+
+  // Auto-restore backup requests from JSON file if ephemeral disk was reset
+  try {
+    const { restoreRequestsToDatabase } = require('./services/backupService');
+    await restoreRequestsToDatabase({ get, run, all });
+  } catch (backupErr) {
+    console.error('Failed to run backup restoration:', backupErr.message);
+  }
 }
 
 module.exports = { db, dbPath, run, get, all, logAction, initDb };
