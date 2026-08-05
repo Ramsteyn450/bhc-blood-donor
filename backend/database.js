@@ -98,6 +98,21 @@ async function addColumnIfNotExists(table, column, definition) {
 
 // Initialize base tables + run migrations
 async function initDb() {
+  // Check if MongoDB Atlas is configured
+  if (process.env.MONGODB_URI) {
+    try {
+      const { connectMongoDB } = require('./services/mongoService');
+      const mongoSuccess = await connectMongoDB();
+      if (mongoSuccess) {
+        process.env.MONGODB_ACTIVE = 'true';
+        console.log('✔ [DATABASE INITIALIZER] MongoDB Atlas Cloud Database initialized successfully.');
+        return;
+      }
+    } catch (mongoErr) {
+      console.error('MongoDB Atlas initialization failed, falling back to SQLite:', mongoErr.message);
+    }
+  }
+
   await run('PRAGMA foreign_keys = ON;');
   await run('PRAGMA journal_mode = WAL;'); // Better concurrent read performance
 

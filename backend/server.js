@@ -16,6 +16,7 @@ const { Server } = require('socket.io');
 const cloudinary = require('cloudinary').v2;
 const db = require('./database');
 const { saveRequestToBackup } = require('./services/backupService');
+const { BloodRequest, Hospital, Admin, AuditLog, getNextRequestId } = require('./services/mongoService');
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -63,6 +64,26 @@ const uploadDir = path.join(__dirname, 'uploads', 'proofs');
 // Database Health & Diagnostic Endpoint
 app.get('/api/health/db', async (req, res) => {
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      const reqCount = await BloodRequest.countDocuments();
+      const hospCount = await Hospital.countDocuments();
+      const adminCount = await Admin.countDocuments();
+      const auditCount = await AuditLog.countDocuments();
+
+      return res.json({
+        status: 'ONLINE',
+        databaseEngine: 'MongoDB Atlas Cloud Database (Permanent)',
+        mongoUriConfigured: true,
+        recordCounts: {
+          blood_requests: reqCount,
+          hospitals: hospCount,
+          admins: adminCount,
+          audit_log: auditCount
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
     const reqCount = await db.get('SELECT COUNT(*) as count FROM blood_requests');
     const hospCount = await db.get('SELECT COUNT(*) as count FROM hospitals');
     const adminCount = await db.get('SELECT COUNT(*) as count FROM admins');
@@ -70,9 +91,9 @@ app.get('/api/health/db', async (req, res) => {
 
     res.json({
       status: 'ONLINE',
+      databaseEngine: 'SQLite Local Engine',
       dbPath: db.dbPath,
       environmentDbPath: process.env.DB_PATH || 'Not set',
-      persistentDiskActive: !!process.env.DB_PATH,
       recordCounts: {
         blood_requests: reqCount ? reqCount.count : 0,
         hospitals: hospCount ? hospCount.count : 0,
@@ -151,6 +172,18 @@ function emitEvent(event, data) {
 // Public: Get List of Verified Hospitals for Dropdown
 app.get('/api/public/hospitals', async (req, res) => {
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      let list = await Hospital.find({ status: 'VERIFIED' }, 'hospital_id hospital_name hospital_address hospital_phone').sort({ hospital_name: 1 }).lean();
+      if (!list || list.length === 0) {
+        list = [
+          { hospital_id: 1, hospital_name: 'K.A.P. Viswanatham Government Medical College Hospital', hospital_address: 'Puthur, Tiruchirappalli', hospital_phone: '+91 431 241 4011' },
+          { hospital_id: 2, hospital_name: 'Apollo Speciality Hospital', hospital_address: 'K.K. Nagar, Tiruchirappalli', hospital_phone: '+91 431 330 7777' },
+          { hospital_id: 3, hospital_name: 'Kauvery Hospital (KMC)', hospital_address: 'Cantonment, Tiruchirappalli', hospital_phone: '+91 431 407 7777' }
+        ];
+      }
+      return res.json(list);
+    }
+
     let list = await db.all("SELECT hospital_id, hospital_name, hospital_address, hospital_phone FROM hospitals WHERE status = 'VERIFIED' ORDER BY hospital_name ASC");
     if (list.length === 0) {
       // Return default verified hospitals if none in DB yet
@@ -225,6 +258,85 @@ app.post('/api/public/requests', async (req, res) => {
   const requestUuid = uuidv4();
 
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      const nextId = await getNextRequestId();
+      const mongoReq = await BloodRequest.create({
+        request_id: nextId,
+        request_uuid: requestUuid,
+        hospital_id: 1,
+        hospital_name: hospital_name.trim(),
+        doctor_department: doctor_department || 'Emergency / ICU',
+        patient_name,
+        patient_age,
+        patient_gender: patient_gender || 'Male',
+        blood_type,
+        quantity,
+        urgency,
+        needed_by: needed_by || null,
+        relative_name,
+        relative_relation: relative_relation || 'Relative',
+        relative_contact,
+        relative_alternate_contact: relative_alternate_contact || '',
+        relative_email,
+        reason: reason || 'Emergency Blood Request',
+        proof_prescription,
+        latitude: latitude || null,
+        longitude: longitude || null,
+        status: 'PENDING'
+      });
+
+      saveRequestToBackup(mongoReq.toObject());
+
+      emitEvent('request:new', {
+        requestId: nextId,
+        requestUuid,
+        hospital_name,
+        patient_name,
+        blood_type,
+        urgency,
+        latitude,
+        longitude,
+        created_at: new Date().toISOString()
+      });
+
+      res.status(201).json({
+        request_id: nextId,
+        request_uuid: requestUuid,
+        message: 'Blood request submitted successfully to MongoDB Atlas Cloud.'
+      });
+
+      if (relative_email) {
+        const confirmHtml = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+            <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
+              <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
+              <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">Autonomous · Tiruchirappalli</p>
+            </div>
+            <div style="padding: 20px; background-color: #ffffff;">
+              <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">Emergency Blood Request Received</h2>
+              <p style="font-size: 13px; color: #334155;">Dear <strong>${relative_name}</strong>,</p>
+              <p style="font-size: 13px; color: #334155;">Your emergency blood request for patient <strong>${patient_name}</strong> (${blood_type}, ${quantity} Units) at <strong>${hospital_name}</strong> has been received by the Bishop Heber College Blood Donor Network.</p>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin: 15px 0;">
+                <div><strong>Request Reference ID:</strong> REQ-${nextId}</div>
+                <div><strong>Hospital:</strong> ${hospital_name} (${doctor_department || 'Emergency'})</div>
+                <div><strong>Blood Group:</strong> ${blood_type} (${urgency} Urgency)</div>
+              </div>
+              <p style="font-size: 12px; color: #64748b;">Our College Administrator is reviewing the request for NSS volunteer dispatch. If approved, available student volunteers will contact you directly.</p>
+            </div>
+            <div style="background-color: #f1f5f9; padding: 12px; text-align: center; font-size: 10px; color: #64748b;">
+              © Bishop Heber College (Autonomous) · Tiruchirappalli
+            </div>
+          </div>
+        `;
+        sendEmail({
+          to: relative_email,
+          subject: `BHC Blood Request Received [REQ-${nextId}] - ${patient_name} (${blood_type})`,
+          htmlText: confirmHtml
+        }).catch(err => console.error('MongoDB confirm email error:', err.message));
+      }
+      return;
+    }
+
     let hospitalId;
     const hosp = await db.get("SELECT hospital_id FROM hospitals WHERE hospital_name = ?", [hospital_name.trim()]);
     if (hosp) {
@@ -583,6 +695,54 @@ app.post('/api/auth/reset-password', async (req, res) => {
 // Admin: Get Stats Summary & Detailed Analytics Charts KPIs
 app.get('/api/admin/stats', async (req, res) => {
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+      const [
+        totalC, todayC, weeklyC, monthlyC, yearlyC,
+        pendingC, approvedC, rejectedC, completedC,
+        byHospital, byGender, byBloodGroup, byEmergency
+      ] = await Promise.all([
+        BloodRequest.countDocuments(),
+        BloodRequest.countDocuments({ created_at: { $gte: startOfDay } }),
+        BloodRequest.countDocuments({ created_at: { $gte: startOfWeek } }),
+        BloodRequest.countDocuments({ created_at: { $gte: startOfMonth } }),
+        BloodRequest.countDocuments({ created_at: { $gte: startOfYear } }),
+        BloodRequest.countDocuments({ status: 'PENDING' }),
+        BloodRequest.countDocuments({ status: { $in: ['APPROVED', 'FORWARDED_TO_NSS', 'ANNOUNCED'] } }),
+        BloodRequest.countDocuments({ status: /^REJECTED/ }),
+        BloodRequest.countDocuments({ status: 'COMPLETED' }),
+        BloodRequest.aggregate([{ $group: { _id: '$hospital_name', count: { $sum: 1 } } }, { $project: { name: '$_id', count: 1, _id: 0 } }, { $sort: { count: -1 } }, { $limit: 8 }]),
+        BloodRequest.aggregate([{ $group: { _id: '$patient_gender', count: { $sum: 1 } } }, { $project: { gender: '$_id', count: 1, _id: 0 } }]),
+        BloodRequest.aggregate([{ $group: { _id: '$blood_type', count: { $sum: 1 } } }, { $project: { blood_type: '$_id', count: 1, _id: 0 } }, { $sort: { count: -1 } }]),
+        BloodRequest.aggregate([{ $group: { _id: '$urgency', count: { $sum: 1 } } }, { $project: { urgency: '$_id', count: 1, _id: 0 } }])
+      ]);
+
+      return res.json({
+        total: totalC,
+        today: todayC,
+        weekly: weeklyC,
+        monthly: monthlyC,
+        yearly: yearlyC,
+        pending: pendingC,
+        approved: approvedC,
+        rejected: rejectedC,
+        completed: completedC,
+        charts: {
+          byHospital: byHospital || [],
+          byGender: byGender || [],
+          byBloodGroup: byBloodGroup || [],
+          byEmergency: byEmergency || [],
+          byDay: [],
+          byMonth: [],
+          byYear: []
+        }
+      });
+    }
     const [
       total, today, weekly, monthly, yearly,
       pending, approved, rejected, completed,
@@ -638,6 +798,28 @@ app.get('/api/admin/requests', authenticateToken, async (req, res) => {
   const { status, blood_type, hospital, gender, date, month, year, search } = req.query;
 
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      const filter = {};
+      if (status === 'PENDING') filter.status = 'PENDING';
+      else if (status === 'APPROVED') filter.status = { $in: ['APPROVED', 'FORWARDED_TO_NSS', 'ANNOUNCED'] };
+      else if (status === 'REJECTED') filter.status = /^REJECTED/;
+      else if (status === 'COMPLETED') filter.status = 'COMPLETED';
+
+      if (blood_type) filter.blood_type = blood_type;
+      if (gender) filter.patient_gender = gender;
+      if (hospital) filter.hospital_name = new RegExp(hospital, 'i');
+      if (search) {
+        filter.$or = [
+          { patient_name: new RegExp(search, 'i') },
+          { hospital_name: new RegExp(search, 'i') },
+          { relative_name: new RegExp(search, 'i') },
+          { relative_contact: new RegExp(search, 'i') }
+        ];
+      }
+
+      const list = await BloodRequest.find(filter).sort({ created_at: -1 }).lean();
+      return res.json(list);
+    }
     let sql = `
       SELECT r.*, COALESCE(h.hospital_name, r.delivery_address, 'Hospital') as hospital_name,
              h.hospital_phone, h.hospital_address,
@@ -718,6 +900,120 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
   }
 
   try {
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      const request = await BloodRequest.findOne({ request_id: requestId });
+      if (!request) return res.status(404).json({ message: 'Request not found' });
+
+      const oldStatus = request.status;
+      let finalStatus = status;
+      if (status === 'REQUEST_RECEIVED') finalStatus = 'Request Received';
+      if (status === 'REJECTED' && rejectionReason) finalStatus = `REJECTED - ${rejectionReason}`;
+
+      request.status = finalStatus;
+      request.admin_approved_at = new Date();
+      request.updated_at = new Date();
+      request.admin_id = id;
+      await request.save();
+
+      saveRequestToBackup(request.toObject());
+
+      emitEvent('request:status_changed', {
+        requestId,
+        status: finalStatus,
+        updated_by: name,
+        relative_email: request.relative_email,
+        timestamp: new Date().toISOString()
+      });
+
+      res.json({
+        message: `Blood request REQ-${requestId} status updated to "${finalStatus}".`,
+        status: finalStatus
+      });
+
+      if (request.relative_email && oldStatus !== finalStatus) {
+        let emailSubject = '';
+        let emailHtml = '';
+        let emailPlain = '';
+
+        if (finalStatus === 'Request Received' || finalStatus === 'REQUEST_RECEIVED') {
+          emailSubject = 'BHC Blood Donor – Request Received';
+          emailPlain = `Dear Sir/Madam,\n\nYour blood request has been successfully received by the Bishop Heber College Blood Donor Team.\n\nPlease note that your request has been received but has NOT yet been approved.\n\nOur College Administration will verify the submitted details.\n\nIf everything is valid, the request will be processed through the existing NSS blood donation procedure.\n\nOnce a student volunteer is available, you will be contacted using the mobile number you provided.\n\nCollege Working Hours:\nMonday – Friday\n10:00 AM – 4:00 PM\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+
+          emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+              <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #d4af37;">
+                <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
+                <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+              </div>
+              <div style="padding: 28px; color: #1e293b;">
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been successfully received by the Bishop Heber College Blood Donor Team.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that your request has been received but has <strong>NOT yet been approved</strong>.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Our College Administration will verify the submitted details.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">If everything is valid, the request will be processed through the existing NSS blood donation procedure.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Once a student volunteer is available, you will be contacted using the mobile number you provided.</p>
+                
+                <div style="background-color: #f8fafc; border-left: 4px solid #0a1428; padding: 14px; margin: 20px 0; border-radius: 6px; border: 1px solid #e2e8f0;">
+                  <p style="margin: 0; font-size: 12px; font-weight: bold; color: #0a1428; text-transform: uppercase;">College Working Hours:</p>
+                  <p style="margin: 4px 0 0 0; font-size: 13px; color: #475569; font-weight: 500;">Monday – Friday<br>10:00 AM – 4:00 PM</p>
+                </div>
+
+                <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
+                  Thank you,<br>
+                  <strong>BHC Blood Donor</strong><br>
+                  Bishop Heber College (Autonomous)
+                </p>
+              </div>
+              <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+                © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
+              </div>
+            </div>
+          `;
+        } else if (finalStatus === 'APPROVED' || finalStatus === 'Approved') {
+          emailSubject = 'BHC Blood Donor – Request Approved';
+          emailPlain = `Dear Sir/Madam,\n\nYour blood request has been approved by the College Administration.\n\nThe request has now been forwarded through the College NSS process.\n\nStudent volunteers will be informed through the existing college procedure.\n\nIf any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.\n\nPlease note that blood donation depends on student availability and willingness.\n\nThank you for your patience.\n\nRegards,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+
+          emailHtml = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+              <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #16a34a;">
+                <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
+                <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+              </div>
+              <div style="padding: 28px; color: #1e293b;">
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been <strong>approved by the College Administration</strong>.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">The request has now been forwarded through the College NSS process.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Student volunteers will be informed through the existing college procedure.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">If any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.</p>
+                <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that blood donation depends on student availability and willingness.</p>
+
+                <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
+                  Thank you for your patience.<br><br>
+                  Regards,<br>
+                  <strong>BHC Blood Donor</strong><br>
+                  Bishop Heber College (Autonomous)
+                </p>
+              </div>
+              <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+                © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
+              </div>
+            </div>
+          `;
+        }
+
+        if (emailSubject && emailHtml) {
+          sendEmail({
+            to: request.relative_email,
+            subject: emailSubject,
+            htmlText: emailHtml,
+            plainText: emailPlain
+          }).then(() => console.log(`✔ [MONGODB STATUS NOTIFICATION SUCCESS] Sent to ${request.relative_email}`))
+            .catch(err => console.error('MongoDB status email error:', err.message));
+        }
+      }
+      return;
+    }
+
     const request = await db.get('SELECT * FROM blood_requests WHERE request_id = ?', [requestId]);
     if (!request) {
       return res.status(404).json({ message: 'Request not found' });
