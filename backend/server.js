@@ -207,14 +207,16 @@ app.post('/api/public/requests', async (req, res) => {
       if (firstHosp) {
         hospitalId = firstHosp.hospital_id;
       } else {
+        const regId = `REG-${Date.now()}`;
         const newHosp = await db.run(
-          `INSERT INTO hospitals (hospital_name, hospital_email, hospital_phone, hospital_address, admin_name, admin_contact, status, password)
-           VALUES (?, ?, ?, ?, ?, ?, 'VERIFIED', 'hospital123')`,
+          `INSERT INTO hospitals (hospital_name, hospital_email, hospital_phone, hospital_address, registration_id, admin_name, admin_contact, status, password)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'VERIFIED', 'hospital123')`,
           [
             hospital_name.trim(),
             `info@${hospital_name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'hospital'}.org`,
             '+91 431 200 0000',
             hospital_name.trim() + ', Tiruchirappalli',
+            regId,
             'Hospital Administration',
             '+91 9876543210'
           ]

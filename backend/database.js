@@ -194,18 +194,21 @@ async function initDb() {
     ['BHC Medical Unit & Health Center', 'healthcenter@bhc.edu.in', '+91 431 277 0136', 'Bishop Heber College Campus, Vayalur Road, Tiruchirappalli 620017', 'Dr. S. Heber', '+91 9876543216', 'VERIFIED', '10.8242', '78.6822']
   ];
 
-  for (const h of trichyHospitals) {
+  for (let idx = 0; idx < trichyHospitals.length; idx++) {
+    const h = trichyHospitals[idx];
     try {
       const existing = await get('SELECT hospital_id FROM hospitals WHERE hospital_name = ?', [h[0]]);
       if (!existing) {
         await run(
-          `INSERT INTO hospitals (hospital_name, hospital_email, hospital_phone, hospital_address, admin_name, admin_contact, status, password)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [h[0], h[1], h[2], h[3], h[4], h[5], h[6], 'hospital123'],
+          `INSERT INTO hospitals (hospital_name, hospital_email, hospital_phone, hospital_address, registration_id, admin_name, admin_contact, status, password)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [h[0], h[1], h[2], h[3], `REG-TRICHY-HOSP-${idx + 101}`, h[4], h[5], h[6], 'hospital123'],
           true
         );
       }
-    } catch { /* skip if exists */ }
+    } catch (err) {
+      console.error(`Failed to seed hospital ${h[0]}:`, err.message);
+    }
   }
 
   // ── TABLE: student_verifications ──────────────────────────────────────────
