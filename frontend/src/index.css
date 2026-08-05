@@ -152,11 +152,11 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* Print CSS - Strictly isolation-mode A4 single page output */
+/* Print CSS - Strictly isolation-mode 1-Page A4 output */
 @media print {
   @page {
     size: A4 portrait;
-    margin: 8mm 10mm;
+    margin: 4mm 6mm;
   }
 
   /* Hide EVERYTHING on the entire webpage by default */
@@ -170,7 +170,7 @@ body {
     visibility: visible !important;
   }
 
-  /* Position the printable sheet at the top of the printed A4 page */
+  /* Position and scale the printable sheet to guarantee 1 single A4 page fit */
   .printable-sheet {
     position: absolute !important;
     left: 0 !important;
@@ -182,6 +182,10 @@ body {
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    transform: scale(0.93) !important;
+    transform-origin: top left !important;
   }
 
   /* Explicitly force hide all no-print control elements */

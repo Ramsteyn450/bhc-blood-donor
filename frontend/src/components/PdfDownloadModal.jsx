@@ -157,7 +157,7 @@ Bishop Heber College Blood Donor Network · Tiruchirappalli`;
         </div>
 
         {/* PRINTABLE PDF CONTENT (SINGLE PAGE A4 SHEET) */}
-        <div ref={printableRef} className="space-y-3.5 border border-slate-300 p-5 rounded-xl bg-white text-slate-900 printable-sheet">
+        <div ref={printableRef} className="space-y-2.5 border border-slate-300 p-4 rounded-xl bg-white text-slate-900 printable-sheet">
 
           {/* BHC Official Header */}
           <div className="flex justify-between items-start border-b-2 border-[#0a1428] pb-2.5">
