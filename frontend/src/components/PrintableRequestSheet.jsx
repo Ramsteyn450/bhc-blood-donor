@@ -9,8 +9,8 @@ export default function PrintableRequestSheet({ request, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 flex justify-center">
-      <div className="bg-white text-black w-full max-w-3xl rounded-xl p-8 my-auto shadow-2xl relative">
+    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 flex justify-center print-backdrop">
+      <div className="bg-white text-black w-full max-w-3xl rounded-xl p-8 my-auto shadow-2xl relative print-card">
 
         {/* Action Bar (Hidden when printing) */}
         <div className="no-print flex justify-between items-center pb-4 mb-6 border-b border-gray-200">

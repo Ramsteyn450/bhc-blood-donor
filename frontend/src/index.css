@@ -152,29 +152,51 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* Print CSS - Strictly isolation-mode 1-Page A4 output */
+/* Print CSS - Strictly 1-Page A4 Full Screen Isolation */
 @media print {
   @page {
     size: A4 portrait;
     margin: 4mm 6mm;
   }
 
-  /* Hide EVERYTHING on the entire webpage by default */
-  body * {
-    visibility: hidden !important;
+  html, body {
+    height: 100% !important;
+    max-height: 100vh !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Reveal ONLY the printable sheet container and its contents */
-  .printable-sheet,
-  .printable-sheet * {
-    visibility: visible !important;
-  }
-
-  /* Position and scale the printable sheet to guarantee 1 single A4 page fit */
-  .printable-sheet {
-    position: absolute !important;
-    left: 0 !important;
+  /* Full screen white backdrop covering entire page height */
+  .print-backdrop {
+    position: fixed !important;
     top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: #ffffff !important;
+    z-index: 999999 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    display: block !important;
+  }
+
+  .print-card {
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .printable-sheet {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
@@ -184,11 +206,10 @@ body {
     background: #ffffff !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    transform: scale(0.93) !important;
+    transform: scale(0.92) !important;
     transform-origin: top left !important;
   }
 
-  /* Explicitly force hide all no-print control elements */
   .no-print, .no-print * {
     display: none !important;
     visibility: hidden !important;

@@ -111,8 +111,8 @@ Bishop Heber College Blood Donor Network · Tiruchirappalli`;
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 flex justify-center items-center">
-      <div className="bg-white text-slate-900 w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative space-y-5 my-4">
+    <div className="fixed inset-0 bg-black/85 z-50 overflow-y-auto p-4 flex justify-center items-center print-backdrop">
+      <div className="bg-white text-slate-900 w-full max-w-2xl rounded-2xl p-6 shadow-2xl relative space-y-5 my-4 print-card">
 
         {/* Triple Action Control Bar (Hidden on print) */}
         <div className="no-print flex flex-wrap justify-between items-center pb-3 border-b border-slate-200 gap-2">
