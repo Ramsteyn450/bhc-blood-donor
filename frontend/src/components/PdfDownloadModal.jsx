@@ -37,106 +37,106 @@ export default function PdfDownloadModal({ request, onClose }) {
           </div>
         </div>
 
-        {/* PRINTABLE PDF CONTENT (LIGHTWEIGHT < 50KB - EXCLUDES PRESCRIPTION IMAGE) */}
-        <div className="space-y-6 border border-slate-300 p-6 rounded-xl bg-white text-slate-900">
+        {/* PRINTABLE PDF CONTENT (FITS EXACTLY 1 A4 PAGE) */}
+        <div className="space-y-3.5 border border-slate-300 p-5 rounded-xl bg-white text-slate-900 printable-sheet">
 
           {/* BHC Official Header */}
-          <div className="flex justify-between items-start border-b-2 border-[#0a1428] pb-4">
+          <div className="flex justify-between items-start border-b-2 border-[#0a1428] pb-2.5">
             <div className="flex items-center gap-3">
-              <BhcCrestLogo className="w-12 h-14" />
+              <BhcCrestLogo className="w-10 h-12" />
               <div>
-                <div className="text-xl font-black font-serif tracking-tight text-[#0a1428]">BISHOP HEBER COLLEGE</div>
-                <div className="text-[11px] font-bold text-[#b45309] tracking-wide uppercase">BHC Blood Donor Emergency Network</div>
-                <div className="text-[10px] text-slate-500 italic mt-0.5">Motto: &quot;Nisi Dominus Frustra&quot; · Tiruchirappalli</div>
+                <div className="text-lg font-black font-serif tracking-tight text-[#0a1428]">BISHOP HEBER COLLEGE</div>
+                <div className="text-[10px] font-bold text-[#b45309] tracking-wide uppercase">BHC Blood Donor Emergency Network</div>
+                <div className="text-[9px] text-slate-500 italic mt-0.5">Motto: &quot;Nisi Dominus Frustra&quot; · Tiruchirappalli</div>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-base font-extrabold text-slate-900">REQ-{request.request_id}</div>
-              <div className="text-[10px] text-slate-500 font-mono">UUID: {request.request_uuid ? request.request_uuid.slice(0, 18) + '...' : '—'}</div>
-              <div className="text-[11px] text-slate-600 font-semibold">{new Date(request.created_at).toLocaleString('en-IN')}</div>
+              <div className="text-sm font-extrabold text-slate-900">REQ-{request.request_id}</div>
+              <div className="text-[9px] text-slate-500 font-mono">UUID: {request.request_uuid ? request.request_uuid.slice(0, 18) + '...' : '—'}</div>
+              <div className="text-[10px] text-slate-600 font-semibold">{new Date(request.created_at).toLocaleString('en-IN')}</div>
             </div>
           </div>
 
           {/* Status Bar */}
-          <div className="bg-slate-50 border-l-4 border-[#0a1428] p-3 flex justify-between items-center text-xs border border-slate-200">
+          <div className="bg-slate-50 border-l-4 border-[#0a1428] p-2 flex justify-between items-center text-xs border border-slate-200">
             <div>
-              <span className="text-slate-500 uppercase font-bold text-[10px]">Workflow Status:</span>
-              <span className="ml-2 font-black text-[#0a1428]">{request.status}</span>
+              <span className="text-slate-500 uppercase font-bold text-[9px]">Workflow Status:</span>
+              <span className="ml-2 font-black text-[#0a1428] text-xs">{request.status}</span>
             </div>
-            <div className="text-slate-700 font-bold flex items-center gap-1">
-              <ShieldCheck size={14} className="text-[#b45309]" /> Digitally Verified
+            <div className="text-slate-700 font-bold flex items-center gap-1 text-[11px]">
+              <ShieldCheck size={13} className="text-[#b45309]" /> Digitally Verified
             </div>
           </div>
 
           {/* Details Grid */}
-          <div className="grid grid-cols-2 gap-4 text-xs">
+          <div className="grid grid-cols-2 gap-3 text-xs">
 
             {/* Hospital Information */}
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
-              <div className="font-extrabold text-[#0a1428] uppercase text-[10px] border-b pb-1">1. Hospital Information</div>
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="font-extrabold text-[#0a1428] uppercase text-[9px] border-b pb-0.5">1. Hospital Information</div>
               <div>
-                <div className="text-slate-500 text-[10px]">Hospital Name</div>
-                <div className="font-bold text-slate-900">{request.hospital_name || 'Hospital'}</div>
+                <div className="text-slate-500 text-[9px]">Hospital Name</div>
+                <div className="font-bold text-slate-900 text-[11px] leading-tight">{request.hospital_name || 'Hospital'}</div>
               </div>
               <div>
-                <div className="text-slate-500 text-[10px]">Department / Ward</div>
-                <div className="font-semibold text-slate-800">{request.doctor_department || 'Emergency / ICU'}</div>
+                <div className="text-slate-500 text-[9px]">Department / Ward</div>
+                <div className="font-semibold text-slate-800 text-[11px]">{request.doctor_department || 'Emergency / ICU'}</div>
               </div>
             </div>
 
             {/* Patient Information */}
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
-              <div className="font-extrabold text-[#0a1428] uppercase text-[10px] border-b pb-1">2. Patient Information</div>
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="font-extrabold text-[#0a1428] uppercase text-[9px] border-b pb-0.5">2. Patient Information</div>
               <div>
-                <div className="text-slate-500 text-[10px]">Patient Name</div>
-                <div className="font-bold text-slate-900">{request.patient_name}</div>
+                <div className="text-slate-500 text-[9px]">Patient Name</div>
+                <div className="font-bold text-slate-900 text-[11px]">{request.patient_name}</div>
               </div>
               <div className="grid grid-cols-2 gap-1">
                 <div>
-                  <div className="text-slate-500 text-[10px]">Age</div>
-                  <div className="font-semibold text-slate-800">{request.patient_age} yrs</div>
+                  <div className="text-slate-500 text-[9px]">Age</div>
+                  <div className="font-semibold text-slate-800 text-[11px]">{request.patient_age} yrs</div>
                 </div>
                 <div>
-                  <div className="text-slate-500 text-[10px]">Gender</div>
-                  <div className="font-semibold text-slate-800">{request.patient_gender || 'Male'}</div>
+                  <div className="text-slate-500 text-[9px]">Gender</div>
+                  <div className="font-semibold text-slate-800 text-[11px]">{request.patient_gender || 'Male'}</div>
                 </div>
               </div>
             </div>
 
             {/* Blood Requirement */}
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
-              <div className="font-extrabold text-[#0a1428] uppercase text-[10px] border-b pb-1">3. Blood Requirement</div>
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="font-extrabold text-[#0a1428] uppercase text-[9px] border-b pb-0.5">3. Blood Requirement</div>
               <div className="grid grid-cols-2 gap-1">
                 <div>
-                  <div className="text-slate-500 text-[10px]">Blood Group</div>
-                  <div className="font-black text-[#dc2626] text-base">{request.blood_type}</div>
+                  <div className="text-slate-500 text-[9px]">Blood Group</div>
+                  <div className="font-black text-[#dc2626] text-sm">{request.blood_type}</div>
                 </div>
                 <div>
-                  <div className="text-slate-500 text-[10px]">Quantity</div>
-                  <div className="font-bold text-slate-900">{request.quantity} Units</div>
+                  <div className="text-slate-500 text-[9px]">Quantity</div>
+                  <div className="font-bold text-slate-900 text-[11px]">{request.quantity} Units</div>
                 </div>
               </div>
               <div>
-                <div className="text-slate-500 text-[10px]">Emergency Level</div>
-                <div className="font-extrabold text-red-600">{request.urgency}</div>
+                <div className="text-slate-500 text-[9px]">Emergency Level</div>
+                <div className="font-extrabold text-red-600 text-[11px]">{request.urgency}</div>
               </div>
             </div>
 
             {/* Relative Details */}
-            <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-2">
-              <div className="font-extrabold text-[#0a1428] uppercase text-[10px] border-b pb-1">4. Relative Details</div>
+            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1.5">
+              <div className="font-extrabold text-[#0a1428] uppercase text-[9px] border-b pb-0.5">4. Relative Details</div>
               <div>
-                <div className="text-slate-500 text-[10px]">Relative Name & Relation</div>
-                <div className="font-bold text-slate-900">{request.relative_name} ({request.relative_relation || 'Relative'})</div>
+                <div className="text-slate-500 text-[9px]">Relative Name & Relation</div>
+                <div className="font-bold text-slate-900 text-[11px]">{request.relative_name} ({request.relative_relation || 'Relative'})</div>
               </div>
               <div className="grid grid-cols-2 gap-1">
                 <div>
-                  <div className="text-slate-500 text-[10px]">Mobile Number</div>
-                  <div className="font-bold font-mono text-slate-900">{request.relative_contact}</div>
+                  <div className="text-slate-500 text-[9px]">Mobile Number</div>
+                  <div className="font-bold font-mono text-slate-900 text-[11px]">{request.relative_contact}</div>
                 </div>
                 <div>
-                  <div className="text-slate-500 text-[10px]">Email Address</div>
-                  <div className="font-mono text-slate-800 text-[11px] truncate">{request.relative_email || '—'}</div>
+                  <div className="text-slate-500 text-[9px]">Email Address</div>
+                  <div className="font-mono text-slate-800 text-[10px] truncate">{request.relative_email || '—'}</div>
                 </div>
               </div>
             </div>
@@ -144,44 +144,44 @@ export default function PdfDownloadModal({ request, onClose }) {
           </div>
 
           {/* 5. Verified Location Link */}
-          <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-200 space-y-1.5 text-xs">
-            <div className="font-extrabold text-[#0a1428] uppercase text-[10px] border-b border-slate-200 pb-1">
+          <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-1 text-xs">
+            <div className="font-extrabold text-[#0a1428] uppercase text-[9px] border-b border-slate-200 pb-0.5">
               5. Verified Location Link
             </div>
-            <div className="pt-1">
-              <span className="text-slate-500 font-semibold block text-[11px] mb-1">Clickable Google Maps Location:</span>
+            <div className="pt-0.5">
+              <span className="text-slate-500 font-semibold block text-[10px] mb-0.5">Clickable Google Maps Location:</span>
               {request.latitude && request.longitude ? (
                 <a
                   href={`https://maps.google.com/?q=${request.latitude},${request.longitude}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-blue-700 underline font-bold font-mono text-[12px] break-all hover:text-blue-900"
+                  className="text-blue-700 underline font-bold font-mono text-[11px] break-all hover:text-blue-900"
                 >
                   https://maps.google.com/?q={request.latitude},{request.longitude}
                 </a>
               ) : (
-                <span className="text-slate-500 italic text-[11px]">Location link unavailable</span>
+                <span className="text-slate-500 italic text-[10px]">Location link unavailable</span>
               )}
             </div>
           </div>
 
           {/* Admin Remarks */}
           {request.admin_remarks && (
-            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs">
+            <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 text-xs">
               <span className="font-bold text-[#0a1428]">Admin Remarks: </span>
-              <span className="text-slate-800">{request.admin_remarks}</span>
+              <span className="text-slate-800 text-[11px]">{request.admin_remarks}</span>
             </div>
           )}
 
           {/* MANDATORY COORDINATOR SIGNATURE BLOCK */}
-          <div className="pt-10 border-t-2 border-slate-300 flex justify-between items-end text-xs">
+          <div className="pt-4 border-t-2 border-slate-300 flex justify-between items-end text-xs">
             <div>
-              <div className="font-bold text-slate-800">Bishop Heber College Blood Donor Network</div>
-              <div className="text-[10px] text-slate-500">Autonomous Institution · Tiruchirappalli</div>
+              <div className="font-bold text-slate-800 text-[11px]">Bishop Heber College Blood Donor Network</div>
+              <div className="text-[9px] text-slate-500">Autonomous Institution · Tiruchirappalli</div>
             </div>
             <div className="text-right">
-              <div className="font-serif italic font-bold text-[#0a1428] text-sm">BHC NSS Coordinator</div>
-              <div className="border-t border-slate-400 pt-1 mt-6 text-[10px] font-bold text-slate-700">
+              <div className="font-serif italic font-bold text-[#0a1428] text-xs">BHC NSS Coordinator</div>
+              <div className="border-t border-slate-400 pt-0.5 mt-4 text-[9px] font-bold text-slate-700">
                 Coordinator Signature (BHC Blood Donor)
               </div>
             </div>

@@ -152,9 +152,41 @@ body {
   100% { background-position: -200% 0; }
 }
 
-/* Print CSS */
+/* Print CSS - Guarantees Single-Page A4 Sheet Layout */
 @media print {
-  .no-print { display: none !important; }
-  body { background: white !important; color: black !important; }
-  .printable-sheet { border: none !important; box-shadow: none !important; padding: 0 !important; }
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+  html, body {
+    background: white !important;
+    color: black !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  .printable-sheet {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
 }
