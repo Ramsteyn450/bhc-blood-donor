@@ -15,11 +15,23 @@ async function getSmtpTransporter() {
 
   const smtpHost = process.env.SMTP_HOST;
   const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-  const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+  const smtpSecure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || smtpPort === 465;
   const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER;
   const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
 
-  // 1. Check Brevo SMTP (smtp-relay.brevo.com)
+  // 1. Gmail Preset (Highest Reliability for Gmail Accounts)
+  if ((smtpHost && smtpHost.includes('gmail')) || (smtpUser && smtpUser.includes('@gmail.com'))) {
+    if (smtpUser && smtpPass) {
+      cachedTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: smtpUser, pass: smtpPass }
+      });
+      console.log(`✔ [EMAIL SERVICE] Configured Gmail Transporter (${smtpUser})`);
+      return cachedTransporter;
+    }
+  }
+
+  // 2. Check Brevo SMTP (smtp-relay.brevo.com)
   if (process.env.BREVO_SMTP_KEY || (smtpHost && smtpHost.includes('brevo'))) {
     const host = smtpHost || 'smtp-relay.brevo.com';
     const user = smtpUser || process.env.BREVO_USER;
@@ -36,7 +48,7 @@ async function getSmtpTransporter() {
     }
   }
 
-  // 2. Check Resend SMTP (smtp.resend.com)
+  // 3. Check Resend SMTP (smtp.resend.com)
   if (process.env.RESEND_API_KEY || (smtpHost && smtpHost.includes('resend'))) {
     const host = smtpHost || 'smtp.resend.com';
     const user = 'resend';
@@ -53,7 +65,7 @@ async function getSmtpTransporter() {
     }
   }
 
-  // 3. Check SendGrid SMTP (smtp.sendgrid.net)
+  // 4. Check SendGrid SMTP (smtp.sendgrid.net)
   if (process.env.SENDGRID_API_KEY || (smtpHost && smtpHost.includes('sendgrid'))) {
     const host = smtpHost || 'smtp.sendgrid.net';
     const user = 'apikey';
@@ -70,7 +82,7 @@ async function getSmtpTransporter() {
     }
   }
 
-  // 4. Custom SMTP Server
+  // 5. Custom SMTP Server
   if (smtpHost && smtpUser && smtpPass) {
     cachedTransporter = nodemailer.createTransport({
       host: smtpHost,
@@ -80,16 +92,6 @@ async function getSmtpTransporter() {
       tls: { rejectUnauthorized: false }
     });
     console.log(`✔ [EMAIL SERVICE] Configured Custom SMTP Provider (${smtpHost}:${smtpPort})`);
-    return cachedTransporter;
-  }
-
-  // 5. Gmail Preset
-  if (smtpUser && smtpPass) {
-    cachedTransporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: smtpUser, pass: smtpPass }
-    });
-    console.log(`✔ [EMAIL SERVICE] Configured Gmail SMTP Provider (${smtpUser})`);
     return cachedTransporter;
   }
 
