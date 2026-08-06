@@ -256,6 +256,8 @@ app.post('/api/public/requests', async (req, res) => {
     return res.status(400).json({ message: 'Missing required request fields (including Relative Email) or Doctor Prescription proof.' });
   }
 
+  const cleanRelativeEmail = (relative_email || '').trim().toLowerCase();
+
   const requestUuid = uuidv4();
 
   try {
@@ -278,7 +280,7 @@ app.post('/api/public/requests', async (req, res) => {
         relative_relation: relative_relation || 'Relative',
         relative_contact,
         relative_alternate_contact: relative_alternate_contact || '',
-        relative_email,
+        relative_email: cleanRelativeEmail,
         reason: reason || 'Emergency Blood Request',
         proof_prescription,
         latitude: latitude || null,
@@ -306,7 +308,9 @@ app.post('/api/public/requests', async (req, res) => {
         message: 'Blood request submitted successfully to MongoDB Atlas Cloud.'
       });
 
-      if (relative_email) {
+      if (cleanRelativeEmail) {
+        const confirmPlain = `Dear ${relative_name},\n\nYour emergency blood request for patient ${patient_name} (${blood_type}, ${quantity} Units) at ${hospital_name} has been received by the Bishop Heber College Blood Donor Network.\n\nRequest Reference ID: REQ-${nextId}\nHospital: ${hospital_name}\nBlood Group: ${blood_type}\n\nOur College Administrator is reviewing the request for NSS volunteer dispatch.\n\nThank you,\nBHC Blood Donor Network`;
+
         const confirmHtml = `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
             <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
@@ -330,10 +334,12 @@ app.post('/api/public/requests', async (req, res) => {
           </div>
         `;
         sendEmail({
-          to: relative_email,
+          to: cleanRelativeEmail,
           subject: `BHC Blood Request Received [REQ-${nextId}] - ${patient_name} (${blood_type})`,
-          htmlText: confirmHtml
-        }).catch(err => console.error('MongoDB confirm email error:', err.message));
+          htmlText: confirmHtml,
+          plainText: confirmPlain
+        }).then(res => console.log(`✔ [PUBLIC CONFIRM EMAIL DISPATCH] Sent to ${cleanRelativeEmail} (REQ-${nextId})`))
+          .catch(err => console.error('MongoDB confirm email error:', err.message));
       }
       return;
     }
@@ -951,7 +957,9 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
         status: finalStatus
       });
 
-      if (request.relative_email && oldStatus !== finalStatus) {
+      const targetEmail = (request.relative_email || '').trim().toLowerCase();
+
+      if (targetEmail && oldStatus !== finalStatus) {
         let emailSubject = '';
         let emailHtml = '';
         let emailPlain = '';
@@ -1024,11 +1032,11 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
 
         if (emailSubject && emailHtml) {
           sendEmail({
-            to: request.relative_email,
+            to: targetEmail,
             subject: emailSubject,
             htmlText: emailHtml,
             plainText: emailPlain
-          }).then(() => console.log(`✔ [MONGODB STATUS NOTIFICATION SUCCESS] Sent to ${request.relative_email}`))
+          }).then(() => console.log(`✔ [MONGODB STATUS NOTIFICATION SUCCESS] Sent to ${targetEmail}`))
             .catch(err => console.error('MongoDB status email error:', err.message));
         }
       }
