@@ -496,38 +496,60 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ message: 'Email and password are required' });
   }
 
+  const cleanEmail = (email || '').trim().toLowerCase();
+
   try {
     let user = null;
     let payload = null;
 
-    if (role === 'admin' || role === 'college' || role === 'nss') {
-      user = await db.get('SELECT * FROM admins WHERE admin_email = ?', [email]);
-      if (!user) {
-        user = await db.get('SELECT * FROM colleges WHERE nss_coordinator_email = ? OR college_email = ?', [email, email]);
-        if (user) {
-          payload = { id: user.college_id, name: user.college_name || user.nss_coordinator_name, email: user.college_email, role: 'admin' };
+    // 1. Check MongoDB Atlas if active
+    if (process.env.MONGODB_ACTIVE === 'true') {
+      try {
+        const mongoAdmin = await Admin.findOne({
+          admin_email: new RegExp(`^${cleanEmail}$`, 'i')
+        }).lean();
+
+        if (mongoAdmin) {
+          user = mongoAdmin;
+          payload = {
+            id: mongoAdmin.admin_id || 1,
+            name: mongoAdmin.admin_name || 'BHC College Administrator',
+            email: mongoAdmin.admin_email,
+            role: 'admin'
+          };
         }
-      } else {
-        payload = { id: user.admin_id, name: user.admin_name, email: user.admin_email, role: 'admin' };
+      } catch (mErr) {
+        console.error('MongoDB login query error:', mErr.message);
       }
     }
 
-    if (!user && (email === 'cs255214307@bhc.edu.in' || email === 'rr4325812@gmail.com' || email === 'admin@bhc.edu.in')) {
-      payload = { id: 1, name: 'College Administrator', email: 'cs255214307@bhc.edu.in', role: 'admin' };
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
-      return res.json({ token, user: payload });
+    // 2. Check SQLite database if not found via MongoDB
+    if (!payload) {
+      try {
+        user = await db.get('SELECT * FROM admins WHERE LOWER(admin_email) = ?', [cleanEmail]);
+        if (user) {
+          payload = { id: user.admin_id, name: user.admin_name, email: user.admin_email, role: 'admin' };
+        }
+      } catch (sErr) {
+        console.error('SQLite login query error:', sErr.message);
+      }
     }
 
-    if (!user && !payload) {
+    // 3. Fallback for primary College Admin emails (Guaranteed success)
+    if (!payload && (cleanEmail === 'cs255214307@bhc.edu.in' || cleanEmail === 'rr4325812@gmail.com' || cleanEmail === 'admin@bhc.edu.in')) {
+      payload = { id: 1, name: 'BHC College Administrator', email: 'cs255214307@bhc.edu.in', role: 'admin' };
+    }
+
+    if (!payload) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, user: payload });
+    return res.json({ token, user: payload });
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    return res.status(500).json({ message: 'Server error during login' });
   }
 });
 
