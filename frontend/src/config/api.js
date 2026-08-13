@@ -1,12 +1,13 @@
 // Central API Base URL Configuration
-// Uses process.env or VITE_API_URL, falling back to http://localhost:5000 in development
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '') || 'http://localhost:5000';
+// Uses VITE_API_URL environment variable if set, otherwise defaults to relative path ''
+// Relative paths work via Vite proxy in development and same-origin in production on Render
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 export const getApiUrl = (path) => {
-  if (!path) return API_BASE_URL;
+  if (!path) return API_BASE_URL || '/';
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `${API_BASE_URL}${cleanPath}`;
+  return API_BASE_URL ? `${API_BASE_URL}${cleanPath}` : cleanPath;
 };
 
 export const apiFetch = async (endpoint, options = {}) => {
