@@ -4,6 +4,7 @@ import {
   AlertTriangle, Clock, Droplets, ShieldCheck, QrCode, X, Loader, Globe, MapPin, Mail, ChevronRight, Home, Info, RefreshCw, Image as ImageIcon, Share2
 } from 'lucide-react';
 import BhcCrestLogo from './BhcCrestLogo';
+import { getApiUrl, apiFetch } from '../config/api';
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
@@ -322,8 +323,8 @@ export default function PublicRequestForm() {
     async function loadHospitalsAndQr() {
       try {
         const [hRes, qrRes] = await Promise.all([
-          fetch('/api/public/hospitals'),
-          fetch('/api/public/common-qr')
+          fetch(getApiUrl('/api/public/hospitals')),
+          fetch(getApiUrl('/api/public/common-qr'))
         ]);
         if (hRes.ok) {
           const list = await hRes.json();
@@ -416,7 +417,7 @@ export default function PublicRequestForm() {
       formData.append('prescription', file);
 
       try {
-        const res = await fetch('/api/public/upload-prescription', {
+        const res = await fetch(getApiUrl('/api/public/upload-prescription'), {
           method: 'POST',
           body: formData
         });
@@ -488,7 +489,7 @@ export default function PublicRequestForm() {
         location_accuracy: location.accuracy
       };
 
-      const res = await fetch('/api/public/requests', {
+      const res = await fetch(getApiUrl('/api/public/requests'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -500,7 +501,7 @@ export default function PublicRequestForm() {
         data = await res.json();
       } else {
         const text = await res.text();
-        throw new Error(res.ok ? 'Unexpected response format' : `Server returned HTML (${res.status}). Please verify backend server status.`);
+        throw new Error(data.message || `Server returned non-JSON response (${res.status}). Please check backend status.`);
       }
 
       if (res.ok) {

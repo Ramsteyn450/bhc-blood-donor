@@ -466,7 +466,7 @@ app.post('/api/public/requests', async (req, res) => {
         patient_name, patient_age, patient_gender || 'Male', reason || 'Emergency blood requirement',
         'Attending Physician', '', doctor_department || 'Emergency', '',
         hospital_name, relative_name, relative_contact,
-        relative_relation || 'Relative', relative_alternate_contact || '', relative_email || '',
+        relative_relation || 'Relative', relative_alternate_contact || '', cleanRelativeEmail,
         proof_prescription, requestUuid,
         latitude || null, longitude || null, request_location_name || '', location_accuracy || ''
       ]
