@@ -28,6 +28,13 @@ const bloodRequestSchema = new mongoose.Schema({
   status: { type: String, default: 'PENDING' },
   admin_approved_at: { type: Date },
   admin_id: { type: Number },
+  email_status: { type: String, default: 'PENDING' },
+  email_sent_at: { type: Date },
+  email_message_id: { type: String },
+  email_error_reason: { type: String },
+  request_received_email_sent: { type: Boolean, default: false },
+  approved_email_sent: { type: Boolean, default: false },
+  rejected_email_sent: { type: Boolean, default: false },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }
 });

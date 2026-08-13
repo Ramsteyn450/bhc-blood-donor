@@ -257,30 +257,61 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
 
 /**
  * Verify Email Service Connectivity on Startup
+ * Safely prints production diagnostics without exposing passwords.
  */
 async function verifyEmailService() {
-  if (process.env.BREVO_API_KEY) {
-    console.log('✔ [EMAIL SERVICE] Brevo HTTP API Key configured.');
-    return true;
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER;
+  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
+  const brevoKey = process.env.BREVO_API_KEY;
+  const resendKey = process.env.RESEND_API_KEY;
+  const sendgridKey = process.env.SENDGRID_API_KEY;
+
+  console.log('\n======================================================');
+  console.log('📧 [EMAIL SERVICE PRODUCTION RUNTIME DIAGNOSTICS]');
+  console.log(`   SMTP Configured:          ${smtpHost ? 'YES' : 'NO'}`);
+  console.log(`   SMTP Host:                ${smtpHost}`);
+  console.log(`   SMTP User Configured:     ${smtpUser ? 'YES' : 'NO'}`);
+  console.log(`   SMTP Password Configured: ${smtpPass ? 'YES' : 'NO'}`);
+  console.log(`   Brevo API Key:            ${brevoKey ? 'YES' : 'NO'}`);
+  console.log(`   Resend API Key:           ${resendKey ? 'YES' : 'NO'}`);
+  console.log(`   SendGrid API Key:         ${sendgridKey ? 'YES' : 'NO'}`);
+  console.log('======================================================\n');
+
+  if (brevoKey) {
+    console.log('✔ [EMAIL SERVICE] Using Brevo HTTP API Provider.');
+    return { success: true, provider: 'Brevo API' };
   }
-  if (process.env.RESEND_API_KEY) {
-    console.log('✔ [EMAIL SERVICE] Resend HTTP API Key configured.');
-    return true;
+  if (resendKey) {
+    console.log('✔ [EMAIL SERVICE] Using Resend HTTP API Provider.');
+    return { success: true, provider: 'Resend API' };
   }
-  if (process.env.SENDGRID_API_KEY) {
-    console.log('✔ [EMAIL SERVICE] SendGrid HTTP API Key configured.');
-    return true;
+  if (sendgridKey) {
+    console.log('✔ [EMAIL SERVICE] Using SendGrid HTTP API Provider.');
+    return { success: true, provider: 'SendGrid API' };
   }
 
-  const transporter = await getSmtpTransporter();
-  if (transporter && transporter.verify) {
-    transporter.verify((err) => {
-      if (err) {
-        console.error('❌ [SMTP VERIFICATION FAILED]:', err.message);
-      } else {
-        console.log('✔ [SMTP CONNECTION VERIFIED SUCCESSFUL]');
-      }
-    });
+  try {
+    const transporter = await getSmtpTransporter();
+    if (!transporter) {
+      console.error('❌ [SMTP CONNECTION FAILED]: Unable to create SMTP transporter instance.');
+      return { success: false, error: 'Unable to create SMTP transporter instance' };
+    }
+
+    if (transporter.verify) {
+      await new Promise((resolve, reject) => {
+        transporter.verify((err, success) => {
+          if (err) reject(err);
+          else resolve(success);
+        });
+      });
+    }
+
+    console.log('✔ [SMTP CONNECTION VERIFIED SUCCESSFUL] Transporter is ready to send messages.');
+    return { success: true, provider: 'SMTP' };
+  } catch (err) {
+    console.error('❌ [SMTP CONNECTION FAILED]:', err.message);
+    return { success: false, error: err.message };
   }
 }
 

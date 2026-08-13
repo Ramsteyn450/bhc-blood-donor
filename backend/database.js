@@ -216,8 +216,14 @@ async function initDb() {
   await addColumnIfNotExists('blood_requests', 'latitude',              'REAL');
   await addColumnIfNotExists('blood_requests', 'longitude',             'REAL');
   await addColumnIfNotExists('blood_requests', 'request_location_name', 'VARCHAR(255)');
-  await addColumnIfNotExists('blood_requests', 'location_accuracy',     'VARCHAR(100)');
   await addColumnIfNotExists('blood_requests', 'relative_email', 'VARCHAR(255)');
+  await addColumnIfNotExists('blood_requests', 'email_status',                 "VARCHAR(50) DEFAULT 'PENDING'");
+  await addColumnIfNotExists('blood_requests', 'email_sent_at',               'TIMESTAMP');
+  await addColumnIfNotExists('blood_requests', 'email_message_id',            'TEXT');
+  await addColumnIfNotExists('blood_requests', 'email_error_reason',          'TEXT');
+  await addColumnIfNotExists('blood_requests', 'request_received_email_sent', 'INTEGER DEFAULT 0');
+  await addColumnIfNotExists('blood_requests', 'approved_email_sent',         'INTEGER DEFAULT 0');
+  await addColumnIfNotExists('blood_requests', 'rejected_email_sent',         'INTEGER DEFAULT 0');
 
   // ── Seed Trichy Hospitals (Expanded Default Tiruchirappalli Hospitals) ──
   const trichyHospitals = [
