@@ -357,9 +357,55 @@ export default function PublicRequestForm() {
     }
   };
 
-  const processPrescriptionFile = (file) => {
-    if (!file) return;
+  const processPrescriptionFile = async (rawFile) => {
+    if (!rawFile) return;
     setUploadingFile(true);
+
+    // Compress image if camera photo
+    let file = rawFile;
+    if (rawFile.type.startsWith('image/')) {
+      try {
+        file = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const maxWidth = 1200;
+              const maxHeight = 1200;
+              let width = img.width;
+              let height = img.height;
+              if (width > maxWidth || height > maxHeight) {
+                if (width > height) {
+                  height = Math.round((height * maxWidth) / width);
+                  width = maxWidth;
+                } else {
+                  width = Math.round((width * maxHeight) / height);
+                  height = maxHeight;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, width, height);
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  resolve(new File([blob], rawFile.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                } else {
+                  resolve(rawFile);
+                }
+              }, 'image/jpeg', 0.7);
+            };
+            img.onerror = () => resolve(rawFile);
+            img.src = e.target.result;
+          };
+          reader.onerror = () => resolve(rawFile);
+          reader.readAsDataURL(rawFile);
+        });
+      } catch (e) {
+        file = rawFile;
+      }
+    }
 
     const previewUrl = URL.createObjectURL(file);
     const reader = new FileReader();
@@ -374,22 +420,22 @@ export default function PublicRequestForm() {
           method: 'POST',
           body: formData
         });
-        if (res.ok) {
+
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const data = await res.json();
           setForm(f => ({
             ...f,
             proof_prescription: { url: data.url, preview: previewUrl, filename: file.name }
           }));
         } else {
-          // Graceful fallback to Base64 Data URI so prescription proof is NEVER lost
-          console.warn('Server upload non-200, using Base64 Data URI fallback');
+          // Fallback to compressed Base64 Data URI
           setForm(f => ({
             ...f,
             proof_prescription: { url: base64Data, preview: previewUrl, filename: file.name }
           }));
         }
       } catch (err) {
-        console.warn('Network issue during prescription upload, using Base64 Data URI fallback:', err);
         setForm(f => ({
           ...f,
           proof_prescription: { url: base64Data, preview: previewUrl, filename: file.name }
@@ -447,7 +493,15 @@ export default function PublicRequestForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
+
+      let data = {};
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(res.ok ? 'Unexpected response format' : `Server returned HTML (${res.status}). Please verify backend server status.`);
+      }
 
       if (res.ok) {
         setSubmittedData({
@@ -459,10 +513,10 @@ export default function PublicRequestForm() {
           urgency: form.urgency
         });
       } else {
-        alert(`Submission Error: ${data.message || data.error || 'Server error occurred during submission.'}`);
+        alert(data.message || 'Failed to submit blood request. Please try again.');
       }
     } catch (err) {
-      alert(`Network Error: ${err.message || 'Connecting to server failed.'}`);
+      alert(err.message || 'Error submitting request. Check network connection.');
     } finally {
       setSubmitting(false);
     }
