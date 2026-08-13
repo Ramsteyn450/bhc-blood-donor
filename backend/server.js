@@ -1169,14 +1169,43 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
           </div>
         </div>
       `;
+    } else if (finalStatus.startsWith('REJECTED')) {
+      emailSubject = 'BHC Blood Donor – Request Status Update';
+      const reasonText = rejectionReason ? `\nReason: ${rejectionReason}` : '';
+      emailPlain = `Dear Sir/Madam,\n\nWe regret to inform you that your blood request [REQ-${requestId}] could not be approved at this time.${reasonText}\n\nFor urgent blood requirements, please contact nearby regional blood banks or district medical centers directly.\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+
+      emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
+          <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #dc2626;">
+            <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
+            <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+          </div>
+          <div style="padding: 28px; color: #1e293b;">
+            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
+            <p style="font-size: 14px; color: #334155; line-height: 1.6;">We regret to inform you that your emergency blood request [REQ-${requestId}] could not be approved at this time.</p>
+            ${rejectionReason ? `<div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 14px; margin: 20px 0; border-radius: 6px;"><p style="margin: 0; font-size: 12px; font-weight: bold; color: #991b1b;">Reason for Rejection:</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #7f1d1d;">${rejectionReason}</p></div>` : ''}
+            <p style="font-size: 14px; color: #334155; line-height: 1.6;">For urgent requirements, please contact nearby regional blood banks or government hospital blood units directly.</p>
+            <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
+              Regards,<br>
+              <strong>BHC Blood Donor</strong><br>
+              Bishop Heber College (Autonomous)
+            </p>
+          </div>
+          <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
+          </div>
+        </div>
+      `;
     }
 
     try {
+      const emailEventName = finalStatus.startsWith('REJECTED') ? 'REJECTED' : (finalStatus === 'APPROVED' || finalStatus === 'Approved' ? 'APPROVED' : 'REQUEST_RECEIVED');
       const mailRes = await sendEmail({
         to: targetEmail,
         subject: emailSubject,
         htmlText: emailHtml,
-        plainText: emailPlain
+        plainText: emailPlain,
+        eventName: emailEventName
       });
 
       // Email Dispatch Succeeded -> Record SENT in DB
@@ -1254,6 +1283,41 @@ app.get('/api/admin/requests/:requestId/print', authenticateToken, async (req, r
     res.json({ request, auditLogs });
   } catch (error) {
     res.status(500).json({ message: 'Database error' });
+  }
+});
+
+// Admin: Protected Test Email Endpoint (Resend HTTPS API)
+app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
+  const { recipientEmail } = req.body;
+  const target = (recipientEmail || req.user.email || 'bhcblooddonor@gmail.com').trim();
+
+  try {
+    const result = await sendEmail({
+      to: target,
+      subject: 'BHC Blood Donor – Admin System Resend API Test',
+      htmlText: `<div style="font-family: Arial, sans-serif; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 550px;">
+        <h2 style="color: #0a1428; margin-top: 0;">BHC Blood Donor Network</h2>
+        <p style="font-size: 14px; color: #334155;">This is a test email sent via <strong>Resend HTTPS REST API</strong> from the BHC Blood Donor Admin Portal.</p>
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin: 16px 0;">
+          <p style="margin: 0; font-size: 13px; color: #166534; font-weight: bold;">✔ Resend HTTPS API Connection Status: SUCCESSFUL</p>
+        </div>
+        <p style="font-size: 11px; color: #64748b;">Timestamp: ${new Date().toISOString()}</p>
+      </div>`,
+      plainText: 'BHC Blood Donor Network Test Email via Resend HTTPS API',
+      eventName: 'TEST_EMAIL'
+    });
+
+    return res.json({
+      success: true,
+      messageId: result.messageId,
+      provider: result.provider || 'Resend'
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      errorCode: 'RESEND_DISPATCH_FAILED',
+      message: err.message || 'Failed to dispatch test email via Resend'
+    });
   }
 });
 

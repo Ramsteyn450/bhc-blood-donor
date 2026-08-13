@@ -1,14 +1,16 @@
 const nodemailer = require('nodemailer');
 
 /**
- * Production-Ready Multi-Provider Email Service
- * Supports Brevo, Resend, SendGrid, Custom SMTP, Gmail, and Ethereal Test Mail
+ * Production-Ready Modular Email Service
+ * Primary Provider: Resend HTTPS REST API (Required for Render Free Web Services)
+ * Secondary Providers: Brevo API, SendGrid API
+ * Fallback: Nodemailer SMTP Transporter (Local Development Only)
  */
 
 let cachedTransporter = null;
 
 /**
- * Get or initialize Nodemailer transporter for SMTP providers
+ * Get or initialize Nodemailer transporter for SMTP providers (Local Dev Fallback)
  */
 async function getSmtpTransporter() {
   if (cachedTransporter) return cachedTransporter;
@@ -19,70 +21,18 @@ async function getSmtpTransporter() {
   const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER;
   const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
 
-  // 1. Gmail Preset (Highest Reliability for Gmail Accounts)
+  // 1. Gmail Preset (Local Dev)
   if ((smtpHost && smtpHost.includes('gmail')) || (smtpUser && smtpUser.includes('@gmail.com'))) {
     if (smtpUser && smtpPass) {
       cachedTransporter = nodemailer.createTransport({
         service: 'gmail',
         auth: { user: smtpUser, pass: smtpPass }
       });
-      console.log(`✔ [EMAIL SERVICE] Configured Gmail Transporter (${smtpUser})`);
       return cachedTransporter;
     }
   }
 
-  // 2. Check Brevo SMTP (smtp-relay.brevo.com)
-  if (process.env.BREVO_SMTP_KEY || (smtpHost && smtpHost.includes('brevo'))) {
-    const host = smtpHost || 'smtp-relay.brevo.com';
-    const user = smtpUser || process.env.BREVO_USER;
-    const pass = process.env.BREVO_SMTP_KEY || smtpPass;
-    if (user && pass) {
-      cachedTransporter = nodemailer.createTransport({
-        host,
-        port: smtpPort || 587,
-        secure: false,
-        auth: { user, pass }
-      });
-      console.log(`✔ [EMAIL SERVICE] Configured Brevo SMTP Provider (${host}:587)`);
-      return cachedTransporter;
-    }
-  }
-
-  // 3. Check Resend SMTP (smtp.resend.com)
-  if (process.env.RESEND_API_KEY || (smtpHost && smtpHost.includes('resend'))) {
-    const host = smtpHost || 'smtp.resend.com';
-    const user = 'resend';
-    const pass = process.env.RESEND_API_KEY || smtpPass;
-    if (pass) {
-      cachedTransporter = nodemailer.createTransport({
-        host,
-        port: 465,
-        secure: true,
-        auth: { user, pass }
-      });
-      console.log(`✔ [EMAIL SERVICE] Configured Resend SMTP Provider (${host}:465)`);
-      return cachedTransporter;
-    }
-  }
-
-  // 4. Check SendGrid SMTP (smtp.sendgrid.net)
-  if (process.env.SENDGRID_API_KEY || (smtpHost && smtpHost.includes('sendgrid'))) {
-    const host = smtpHost || 'smtp.sendgrid.net';
-    const user = 'apikey';
-    const pass = process.env.SENDGRID_API_KEY || smtpPass;
-    if (pass) {
-      cachedTransporter = nodemailer.createTransport({
-        host,
-        port: 587,
-        secure: false,
-        auth: { user, pass }
-      });
-      console.log(`✔ [EMAIL SERVICE] Configured SendGrid SMTP Provider (${host}:587)`);
-      return cachedTransporter;
-    }
-  }
-
-  // 5. Custom SMTP Server
+  // 2. Custom SMTP Server
   if (smtpHost && smtpUser && smtpPass) {
     cachedTransporter = nodemailer.createTransport({
       host: smtpHost,
@@ -91,11 +41,10 @@ async function getSmtpTransporter() {
       auth: { user: smtpUser, pass: smtpPass },
       tls: { rejectUnauthorized: false }
     });
-    console.log(`✔ [EMAIL SERVICE] Configured Custom SMTP Provider (${smtpHost}:${smtpPort})`);
     return cachedTransporter;
   }
 
-  // 6. Ethereal Test Account Fallback (Development)
+  // 3. Ethereal Test Account Fallback (Development)
   try {
     const testAccount = await nodemailer.createTestAccount();
     cachedTransporter = nodemailer.createTransport({
@@ -107,8 +56,6 @@ async function getSmtpTransporter() {
       greetingTimeout: 4000,
       socketTimeout: 4000
     });
-    console.log(`⚠️ [EMAIL SERVICE NOTICE] No production SMTP/API key found in .env.`);
-    console.log(`   Initialized Ethereal Test Transporter: ${testAccount.user}`);
   } catch (err) {
     console.error('❌ [EMAIL SERVICE ERROR] Ethereal fallback failed:', err.message);
   }
@@ -117,11 +64,20 @@ async function getSmtpTransporter() {
 }
 
 /**
- * Send Email via HTTP API (Brevo REST API / Resend API / SendGrid API) or SMTP Transporter
+ * Send Email via Resend HTTPS REST API (Primary) or Modular Fallbacks
  */
-async function sendEmail({ to, subject, htmlText, plainText }) {
-  const rawSender = process.env.EMAIL_FROM || 'ramachandranramachandran5944@gmail.com';
-  let fromEmail = rawSender.trim();
+async function sendEmail({ to, subject, htmlText, plainText, eventName = 'EMAIL_DISPATCH' }) {
+  const recipient = (to || '').trim();
+  if (!recipient) {
+    throw new Error('Recipient email address is required.');
+  }
+
+  const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
+  const brevoApiKey = (process.env.BREVO_API_KEY || '').trim();
+  const sendgridApiKey = (process.env.SENDGRID_API_KEY || '').trim();
+  const rawSender = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+
+  let fromEmail = 'onboarding@resend.dev';
   let fromName = 'BHC Blood Donor Network';
 
   if (rawSender.includes('<') && rawSender.includes('>')) {
@@ -130,85 +86,131 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
       if (match[1]) fromName = match[1].trim();
       fromEmail = match[2].trim();
     }
+  } else if (rawSender.includes('@')) {
+    fromEmail = rawSender.trim();
   }
-  const fromAddress = `"${fromName}" <${fromEmail}>`;
+
+  let fromAddress = `"${fromName}" <${fromEmail}>`;
 
   let lastError = '';
 
-  // --- OPTION A: Brevo HTTP REST API ---
-  if (process.env.BREVO_API_KEY) {
+  // ======================================================
+  // 1. PRIMARY PROVIDER: RESEND HTTPS REST API
+  // ======================================================
+  if (resendApiKey) {
+    // If using default testing domain for Resend, ensure address is onboarding@resend.dev
+    if (!process.env.EMAIL_FROM || fromEmail.includes('@gmail.com')) {
+      fromAddress = `"BHC Blood Donor Network" <onboarding@resend.dev>`;
+    }
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'authorization': `Bearer ${resendApiKey}`
+        },
+        body: JSON.stringify({
+          from: fromAddress,
+          to: [recipient],
+          subject: subject,
+          html: htmlText,
+          text: plainText
+        })
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.id) {
+        console.log(`\n[EMAIL]`);
+        console.log(`Provider: Resend`);
+        console.log(`Recipient: ${recipient}`);
+        console.log(`Event: ${eventName}`);
+        console.log(`Status: SENT`);
+        console.log(`Message ID: ${resData.id}\n`);
+
+        return { success: true, provider: 'Resend', messageId: resData.id };
+      } else {
+        const errMsg = resData.message || JSON.stringify(resData);
+        lastError = `Resend API Error: ${errMsg}`;
+        console.error(`\n[EMAIL]`);
+        console.error(`Provider: Resend`);
+        console.error(`Event: ${eventName}`);
+        console.error(`Status: FAILED`);
+        console.error(`Error: ${errMsg}\n`);
+      }
+    } catch (apiErr) {
+      lastError = `Resend API Fetch Error: ${apiErr.message}`;
+      console.error(`\n[EMAIL]`);
+      console.error(`Provider: Resend`);
+      console.error(`Event: ${eventName}`);
+      console.error(`Status: FAILED`);
+      console.error(`Error: ${apiErr.message}\n`);
+    }
+  }
+
+  // ======================================================
+  // 2. SECONDARY PROVIDER: BREVO HTTPS REST API
+  // ======================================================
+  if (brevoApiKey) {
     try {
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
           'accept': 'application/json',
           'content-type': 'application/json',
-          'api-key': process.env.BREVO_API_KEY.trim()
+          'api-key': brevoApiKey
         },
         body: JSON.stringify({
           sender: { name: fromName, email: fromEmail },
-          to: [{ email: to }],
+          to: [{ email: recipient }],
           subject: subject,
-          htmlContent: htmlText
+          htmlContent: htmlText,
+          textContent: plainText
         })
       });
 
       const resData = await response.json();
-      if (response.ok) {
-        console.log(`✔ [BREVO API SUCCESS] Email dispatched to ${to} | MessageID: ${resData.messageId}`);
-        return { success: true, provider: 'Brevo API', messageId: resData.messageId };
+      if (response.ok && resData.messageId) {
+        console.log(`\n[EMAIL]`);
+        console.log(`Provider: Brevo`);
+        console.log(`Recipient: ${recipient}`);
+        console.log(`Event: ${eventName}`);
+        console.log(`Status: SENT`);
+        console.log(`Message ID: ${resData.messageId}\n`);
+
+        return { success: true, provider: 'Brevo', messageId: resData.messageId };
       } else {
-        lastError = `Brevo API (${response.status}): ${resData.message || JSON.stringify(resData)}`;
-        console.error(`❌ [BREVO API ERROR]:`, resData);
+        const errMsg = resData.message || JSON.stringify(resData);
+        lastError = `Brevo API Error: ${errMsg}`;
+        console.error(`\n[EMAIL]`);
+        console.error(`Provider: Brevo`);
+        console.error(`Event: ${eventName}`);
+        console.error(`Status: FAILED`);
+        console.error(`Error: ${errMsg}\n`);
       }
     } catch (apiErr) {
       lastError = `Brevo API Fetch Error: ${apiErr.message}`;
-      console.error(`❌ [BREVO API FETCH ERROR]:`, apiErr.message);
+      console.error(`\n[EMAIL]`);
+      console.error(`Provider: Brevo`);
+      console.error(`Event: ${eventName}`);
+      console.error(`Status: FAILED`);
+      console.error(`Error: ${apiErr.message}\n`);
     }
   }
 
-  // --- OPTION B: Resend HTTP REST API ---
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'authorization': `Bearer ${process.env.RESEND_API_KEY.trim()}`
-        },
-        body: JSON.stringify({
-          from: fromAddress,
-          to: [to],
-          subject: subject,
-          html: htmlText
-        })
-      });
-
-      const resData = await response.json();
-      if (response.ok) {
-        console.log(`✔ [RESEND API SUCCESS] Email dispatched to ${to} | ID: ${resData.id}`);
-        return { success: true, provider: 'Resend API', messageId: resData.id };
-      } else {
-        lastError = `Resend API: ${resData.message || JSON.stringify(resData)}`;
-        console.error(`❌ [RESEND API ERROR]:`, resData);
-      }
-    } catch (apiErr) {
-      lastError = `Resend API Fetch Error: ${apiErr.message}`;
-      console.error(`❌ [RESEND API FETCH ERROR]:`, apiErr.message);
-    }
-  }
-
-  // --- OPTION C: SendGrid HTTP REST API ---
-  if (process.env.SENDGRID_API_KEY) {
+  // ======================================================
+  // 3. TERTIARY PROVIDER: SENDGRID HTTPS REST API
+  // ======================================================
+  if (sendgridApiKey) {
     try {
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'authorization': `Bearer ${process.env.SENDGRID_API_KEY.trim()}`
+          'authorization': `Bearer ${sendgridApiKey}`
         },
         body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
+          personalizations: [{ to: [{ email: recipient }] }],
           from: { email: fromEmail, name: fromName },
           subject: subject,
           content: [{ type: 'text/html', value: htmlText }]
@@ -216,103 +218,115 @@ async function sendEmail({ to, subject, htmlText, plainText }) {
       });
 
       if (response.ok) {
-        console.log(`✔ [SENDGRID API SUCCESS] Email dispatched to ${to}`);
-        return { success: true, provider: 'SendGrid API' };
+        console.log(`\n[EMAIL]`);
+        console.log(`Provider: SendGrid`);
+        console.log(`Recipient: ${recipient}`);
+        console.log(`Event: ${eventName}`);
+        console.log(`Status: SENT\n`);
+
+        return { success: true, provider: 'SendGrid', messageId: 'sendgrid-ok' };
       } else {
         const errText = await response.text();
-        lastError = `SendGrid API: ${errText}`;
-        console.error(`❌ [SENDGRID API ERROR]:`, errText);
+        lastError = `SendGrid API Error: ${errText}`;
+        console.error(`\n[EMAIL]`);
+        console.error(`Provider: SendGrid`);
+        console.error(`Event: ${eventName}`);
+        console.error(`Status: FAILED`);
+        console.error(`Error: ${errText}\n`);
       }
     } catch (apiErr) {
       lastError = `SendGrid API Fetch Error: ${apiErr.message}`;
-      console.error(`❌ [SENDGRID API FETCH ERROR]:`, apiErr.message);
+      console.error(`\n[EMAIL]`);
+      console.error(`Provider: SendGrid`);
+      console.error(`Event: ${eventName}`);
+      console.error(`Status: FAILED`);
+      console.error(`Error: ${apiErr.message}\n`);
     }
   }
 
-  // --- OPTION D: Nodemailer SMTP Transporter ---
+  // ======================================================
+  // 4. FALLBACK: NODEMAILER SMTP TRANSPORTER (LOCAL DEV ONLY)
+  // ======================================================
   try {
     const transporter = await getSmtpTransporter();
     if (transporter) {
       const info = await transporter.sendMail({
         from: fromAddress,
-        to,
+        to: recipient,
         subject,
         html: htmlText,
         text: plainText
       });
 
-      console.log(`✔ [SMTP DISPATCH SUCCESS] Email sent to: ${to} | MessageID: ${info.messageId}`);
-      if (nodemailer.getTestMessageUrl && info) {
-        console.log('   Ethereal Preview URL:', nodemailer.getTestMessageUrl(info));
-      }
+      console.log(`\n[EMAIL]`);
+      console.log(`Provider: SMTP Transporter`);
+      console.log(`Recipient: ${recipient}`);
+      console.log(`Event: ${eventName}`);
+      console.log(`Status: SENT`);
+      console.log(`Message ID: ${info.messageId}\n`);
+
       return { success: true, provider: 'SMTP', messageId: info.messageId };
     }
   } catch (smtpErr) {
-    lastError = `SMTP Error: ${smtpErr.message}`;
-    console.error(`❌ [SMTP DISPATCH ERROR]:`, smtpErr.message);
+    lastError = `SMTP Transporter Error: ${smtpErr.message}`;
+    console.error(`\n[EMAIL]`);
+    console.error(`Provider: SMTP Transporter`);
+    console.error(`Event: ${eventName}`);
+    console.error(`Status: FAILED`);
+    console.error(`Error: ${smtpErr.message}\n`);
   }
 
-  throw new Error(lastError || 'No email provider or SMTP transporter available.');
+  throw new Error(lastError || 'No email provider (RESEND_API_KEY or SMTP) configured.');
 }
 
 /**
  * Verify Email Service Connectivity on Startup
- * Safely prints production diagnostics without exposing passwords.
+ * Safely prints production diagnostics without exposing credentials.
  */
 async function verifyEmailService() {
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
-  const brevoKey = process.env.BREVO_API_KEY;
   const resendKey = process.env.RESEND_API_KEY;
+  const brevoKey = process.env.BREVO_API_KEY;
   const sendgridKey = process.env.SENDGRID_API_KEY;
+  const smtpHost = process.env.SMTP_HOST;
 
   console.log('\n======================================================');
   console.log('📧 [EMAIL SERVICE PRODUCTION RUNTIME DIAGNOSTICS]');
-  console.log(`   SMTP Configured:          ${smtpHost ? 'YES' : 'NO'}`);
-  console.log(`   SMTP Host:                ${smtpHost}`);
-  console.log(`   SMTP User Configured:     ${smtpUser ? 'YES' : 'NO'}`);
-  console.log(`   SMTP Password Configured: ${smtpPass ? 'YES' : 'NO'}`);
-  console.log(`   Brevo API Key:            ${brevoKey ? 'YES' : 'NO'}`);
-  console.log(`   Resend API Key:           ${resendKey ? 'YES' : 'NO'}`);
-  console.log(`   SendGrid API Key:         ${sendgridKey ? 'YES' : 'NO'}`);
+  console.log(`   Resend API Key:           ${resendKey ? 'CONFIGURED (Primary)' : 'NO'}`);
+  console.log(`   Brevo API Key:            ${brevoKey ? 'CONFIGURED' : 'NO'}`);
+  console.log(`   SendGrid API Key:         ${sendgridKey ? 'CONFIGURED' : 'NO'}`);
+  console.log(`   SMTP Fallback Host:       ${smtpHost || 'None (Using HTTPS APIs)'}`);
   console.log('======================================================\n');
 
-  if (brevoKey) {
-    console.log('✔ [EMAIL SERVICE] Using Brevo HTTP API Provider.');
-    return { success: true, provider: 'Brevo API' };
-  }
   if (resendKey) {
-    console.log('✔ [EMAIL SERVICE] Using Resend HTTP API Provider.');
+    console.log('✔ [EMAIL SERVICE] Using Resend HTTPS REST API Provider (Render Production Ready).');
     return { success: true, provider: 'Resend API' };
   }
+  if (brevoKey) {
+    console.log('✔ [EMAIL SERVICE] Using Brevo HTTPS REST API Provider.');
+    return { success: true, provider: 'Brevo API' };
+  }
   if (sendgridKey) {
-    console.log('✔ [EMAIL SERVICE] Using SendGrid HTTP API Provider.');
+    console.log('✔ [EMAIL SERVICE] Using SendGrid HTTPS REST API Provider.');
     return { success: true, provider: 'SendGrid API' };
   }
 
   try {
     const transporter = await getSmtpTransporter();
-    if (!transporter) {
-      console.error('❌ [SMTP CONNECTION FAILED]: Unable to create SMTP transporter instance.');
-      return { success: false, error: 'Unable to create SMTP transporter instance' };
-    }
-
-    if (transporter.verify) {
+    if (transporter && transporter.verify) {
       await new Promise((resolve, reject) => {
         transporter.verify((err, success) => {
           if (err) reject(err);
           else resolve(success);
         });
       });
+      console.log('✔ [EMAIL SERVICE] Local SMTP Fallback Transporter Ready.');
+      return { success: true, provider: 'SMTP' };
     }
-
-    console.log('✔ [SMTP CONNECTION VERIFIED SUCCESSFUL] Transporter is ready to send messages.');
-    return { success: true, provider: 'SMTP' };
   } catch (err) {
-    console.error('❌ [SMTP CONNECTION FAILED]:', err.message);
-    return { success: false, error: err.message };
+    console.warn('⚠️ [EMAIL SERVICE] SMTP Fallback Verification Notice:', err.message);
   }
+
+  return { success: false, error: 'No active email provider key configured.' };
 }
 
 module.exports = {
