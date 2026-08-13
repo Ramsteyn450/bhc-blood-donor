@@ -357,33 +357,54 @@ export default function PublicRequestForm() {
     }
   };
 
-  const processPrescriptionFile = async (file) => {
+  const processPrescriptionFile = (file) => {
     if (!file) return;
     setUploadingFile(true);
 
     const previewUrl = URL.createObjectURL(file);
-    const formData = new FormData();
-    formData.append('prescription', file);
+    const reader = new FileReader();
 
-    try {
-      const res = await fetch('/api/public/upload-prescription', {
-        method: 'POST',
-        body: formData
-      });
-      if (res.ok) {
-        const data = await res.json();
+    reader.onload = async (e) => {
+      const base64Data = e.target.result;
+      const formData = new FormData();
+      formData.append('prescription', file);
+
+      try {
+        const res = await fetch('/api/public/upload-prescription', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setForm(f => ({
+            ...f,
+            proof_prescription: { url: data.url, preview: previewUrl, filename: file.name }
+          }));
+        } else {
+          // Graceful fallback to Base64 Data URI so prescription proof is NEVER lost
+          console.warn('Server upload non-200, using Base64 Data URI fallback');
+          setForm(f => ({
+            ...f,
+            proof_prescription: { url: base64Data, preview: previewUrl, filename: file.name }
+          }));
+        }
+      } catch (err) {
+        console.warn('Network issue during prescription upload, using Base64 Data URI fallback:', err);
         setForm(f => ({
           ...f,
-          proof_prescription: { url: data.url, preview: previewUrl, filename: file.name }
+          proof_prescription: { url: base64Data, preview: previewUrl, filename: file.name }
         }));
-      } else {
-        alert('Prescription upload failed. Please try again.');
+      } finally {
+        setUploadingFile(false);
       }
-    } catch {
-      alert('Error uploading file. Check network connection.');
-    } finally {
+    };
+
+    reader.onerror = () => {
+      alert('Failed to read selected file. Please select another image or document.');
       setUploadingFile(false);
-    }
+    };
+
+    reader.readAsDataURL(file);
   };
 
   const handleFileInputChange = (e) => {

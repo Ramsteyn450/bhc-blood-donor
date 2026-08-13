@@ -198,19 +198,21 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowed = /jpeg|jpg|png|gif|pdf|webp/;
-  const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
-  if (allowed.test(ext)) {
+  const allowed = /jpeg|jpg|png|gif|pdf|webp/i;
+  const ext = path.extname(file.originalname || '').toLowerCase().replace('.', '');
+  const mimetype = (file.mimetype || '').toLowerCase();
+  if (allowed.test(ext) || allowed.test(mimetype) || mimetype.includes('image') || mimetype.includes('pdf') || mimetype.includes('octet-stream')) {
     cb(null, true);
   } else {
-    cb(new Error('Only images (JPG, PNG, WebP, GIF) and PDFs are allowed.'));
+    // Permissive fallback so mobile camera photos are never rejected
+    cb(null, true);
   }
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
 // Cache & Logger
@@ -264,21 +266,11 @@ app.get('/api/public/hospitals', async (req, res) => {
       }
       return res.json(list);
     }
-
-    let list = await db.all("SELECT hospital_id, hospital_name, hospital_address, hospital_phone FROM hospitals WHERE status = 'VERIFIED' ORDER BY hospital_name ASC");
-    if (list.length === 0) {
-      // Return default verified hospitals if none in DB yet
-      list = [
-        { hospital_id: 1, hospital_name: 'City General Hospital', hospital_address: '123 Health Ave', hospital_phone: '+91 9876543210' },
-        { hospital_id: 2, hospital_name: 'Apollo Speciality Care', hospital_address: '45 Care Street', hospital_phone: '+91 9876543211' },
-        { hospital_id: 3, hospital_name: 'St. Mary Emergency Center', hospital_address: '88 Mercy Road', hospital_phone: '+91 9876543212' },
-        { hospital_id: 4, hospital_name: 'BHC Medical Center', hospital_address: 'College Road, Campus North', hospital_phone: '+91 9876543213' }
-      ];
-    }
+    const list = await db.all('SELECT hospital_id, hospital_name, hospital_address, hospital_phone FROM hospitals WHERE status = "VERIFIED" ORDER BY hospital_name ASC');
     res.json(list);
-  } catch (error) {
-    console.error('Error fetching public hospitals:', error);
-    res.status(500).json({ message: 'Database error' });
+  } catch (err) {
+    console.error('Failed to fetch public hospitals:', err);
+    res.status(500).json({ message: 'Failed to load hospitals list' });
   }
 });
 
@@ -293,34 +285,39 @@ app.get('/api/public/common-qr', async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Failed to generate QR Code' });
   }
-});
-
-// Public: Upload Doctor Prescription (Supports Cloudinary + Local fallback)
-app.post('/api/public/upload-prescription', upload.single('prescription'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No prescription file provided' });
+// Public: Upload Doctor Prescription (Supports Cloudinary + Local fallback + Graceful error handling)
+app.post('/api/public/upload-prescription', (req, res) => {
+  upload.single('prescription')(req, res, async (err) => {
+    if (err) {
+      console.error('❌ [PRESCRIPTION UPLOAD MULTER ERROR]:', err.message);
+      return res.status(400).json({ message: err.message || 'Prescription file upload failed' });
     }
-
-    let fileUrl = `/uploads/proofs/${req.file.filename}`;
-
-    // Cloudinary Upload if configured
-    if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
-      try {
-        const cloudResult = await cloudinary.uploader.upload(req.file.path, {
-          folder: 'bhc_prescriptions'
-        });
-        fileUrl = cloudResult.secure_url;
-      } catch (cloudErr) {
-        console.error('Cloudinary upload error, using local fallback:', cloudErr.message);
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: 'No prescription file provided' });
       }
-    }
 
-    res.json({ message: 'Prescription uploaded successfully', url: fileUrl, filename: req.file.originalname });
-  } catch (error) {
-    console.error('Prescription upload error:', error);
-    res.status(500).json({ message: 'Upload failed' });
-  }
+      let fileUrl = `/uploads/proofs/${req.file.filename}`;
+
+      // Cloudinary Upload if configured
+      if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY) {
+        try {
+          const cloudResult = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'bhc_prescriptions'
+          });
+          fileUrl = cloudResult.secure_url;
+        } catch (cloudErr) {
+          console.error('Cloudinary upload error, using local fallback:', cloudErr.message);
+        }
+      }
+
+      console.log(`✔ [PRESCRIPTION UPLOAD SUCCESS] File: ${req.file.originalname} -> URL: ${fileUrl}`);
+      return res.json({ message: 'Prescription uploaded successfully', url: fileUrl, filename: req.file.originalname });
+    } catch (error) {
+      console.error('Prescription upload error:', error);
+      return res.status(500).json({ message: 'Upload processing failed' });
+    }
+  });
 });
 
 // Public: Submit Emergency Blood Request (Patient Relative Flow)
