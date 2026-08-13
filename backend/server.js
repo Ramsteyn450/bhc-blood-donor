@@ -285,6 +285,8 @@ app.get('/api/public/common-qr', async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Failed to generate QR Code' });
   }
+});
+
 // Public: Upload Doctor Prescription (Supports Cloudinary + Local fallback + Graceful error handling)
 app.post('/api/public/upload-prescription', (req, res) => {
   upload.single('prescription')(req, res, async (err) => {
