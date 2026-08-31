@@ -17,7 +17,7 @@ const cloudinary = require('cloudinary').v2;
 const db = require('./database');
 const { saveRequestToBackup } = require('./services/backupService');
 const { BloodRequest, Hospital, Admin, AuditLog, getNextRequestId } = require('./services/mongoService');
-const { sendEmail, verifyEmailService } = require('./services/emailService');
+const { sendEmail, verifyEmailService, verifySMTP } = require('./services/emailService');
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -137,53 +137,119 @@ app.get('/api/health/email', async (req, res) => {
   }
 });
 
-// Admin: Protected SMTP Test Email Dispatch Endpoint (Requirement 5)
+// Admin: Protected Gmail SMTP Test Email Endpoint
 app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
-  const { targetEmail } = req.body;
-  const destination = (targetEmail || req.user.email || process.env.SMTP_USER || '').trim().toLowerCase();
+  const { recipientEmail } = req.body;
+  const destination = (recipientEmail || process.env.SMTP_USER || '').trim();
 
   if (!destination) {
-    return res.status(400).json({ success: false, error: 'No valid recipient email address provided.' });
+    return res.status(400).json({
+      success: false,
+      error: 'No recipient email address provided.',
+      errorCode: 'NO_RECIPIENT'
+    });
   }
 
+  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || '').trim();
+  const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+  const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+
   console.log(`\n======================================================`);
-  console.log(`📧 [ADMIN SMTP TEST EMAIL INITIATED]`);
-  console.log(`   Target Email: ${destination}`);
-  console.log(`   Admin User:   ${req.user.name} (${req.user.email})`);
+  console.log(`📧 [ADMIN GMAIL SMTP TEST EMAIL]`);
+  console.log(`   SMTP Host:               ${smtpHost}`);
+  console.log(`   SMTP Port:               ${smtpPort}`);
+  console.log(`   SMTP User Configured:    ${smtpUser ? 'YES' : 'NO'}`);
+  console.log(`   SMTP Password Configured: ${smtpPass ? 'YES' : 'NO'}`);
+  console.log(`   Test Recipient:          ${destination}`);
   console.log(`======================================================\n`);
 
+  // Step 1: Verify SMTP connection first
+  try {
+    await verifySMTP();
+    console.log('✔ [GMAIL SMTP] Connection verification passed. Proceeding to send test email...');
+  } catch (verifyErr) {
+    console.error('❌ [GMAIL SMTP] Verification FAILED:', verifyErr.message);
+    return res.status(500).json({
+      success: false,
+      error: verifyErr.message,
+      errorCode: 'SMTP_VERIFICATION_FAILED',
+      smtpDiagnostics: {
+        host: smtpHost,
+        port: smtpPort,
+        smtpUserConfigured: !!smtpUser,
+        smtpPasswordConfigured: !!smtpPass,
+        smtpConnection: 'FAILED'
+      }
+    });
+  }
+
+  // Step 2: Send the test email
   try {
     const mailRes = await sendEmail({
       to: destination,
-      subject: 'BHC Blood Donor Network – SMTP Diagnostic Test Email',
+      subject: 'BHC Blood Donor – Email Service Test',
       htmlText: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background-color: #ffffff;">
-          <h2 style="color: #0a1428;">BHC Blood Donor – SMTP Test Verification</h2>
-          <p style="font-size: 14px; color: #334155;">This is an administrative test email sent from the live BHC Blood Donor Network server.</p>
-          <p style="font-size: 13px; color: #16a34a; font-weight: bold;">✔ If you are reading this email, production email delivery is working 100%!</p>
-          <div style="font-size: 12px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 6px; margin-top: 16px;">
-            <div><strong>Timestamp:</strong> ${new Date().toISOString()}</div>
-            <div><strong>Recipient:</strong> ${destination}</div>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+          <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
+            <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
+            <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Network</p>
+          </div>
+          <div style="padding: 28px; background: #fff;">
+            <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">✔ Gmail Email Service Test</h2>
+            <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+              This is a test email from the BHC Blood Donor system.
+            </p>
+            <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+              If you received this email, Gmail SMTP configuration is working correctly.
+            </p>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 14px; border-radius: 8px; margin: 16px 0;">
+              <p style="margin: 0; font-size: 13px; color: #166534; font-weight: bold;">✔ Gmail SMTP Connection: SUCCESS</p>
+              <p style="margin: 4px 0 0; font-size: 12px; color: #166534;">Timestamp: ${new Date().toISOString()}</p>
+            </div>
+            <p style="font-size: 14px; color: #334155; margin-top: 24px;">
+              Bishop Heber College<br>
+              <strong>BHC Blood Donor</strong>
+            </p>
+          </div>
+          <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 11px; color: #64748b;">
+            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
           </div>
         </div>
       `,
-      plainText: `BHC Blood Donor – SMTP Diagnostic Test Email\n\nThis is an administrative test email sent from the live BHC Blood Donor Network server.\n\nTimestamp: ${new Date().toISOString()}\nRecipient: ${destination}`
+      plainText: `This is a test email from the BHC Blood Donor system.\n\nIf you received this email, Gmail SMTP configuration is working correctly.\n\nBishop Heber College\nBHC Blood Donor`,
+      eventName: 'TEST_EMAIL'
     });
 
-    console.log(`✔ [ADMIN TEST EMAIL SUCCESS] MessageID: ${mailRes.messageId || 'SENT'} | Provider: ${mailRes.provider || 'SMTP'}`);
+    console.log(`✔ [GMAIL TEST EMAIL SUCCESS] MessageID: ${mailRes.messageId} | Recipient: ${destination}`);
     return res.json({
       success: true,
-      provider: mailRes.provider || 'SMTP',
-      messageId: mailRes.messageId || 'SENT',
-      recipient: destination
+      message: 'Test email sent successfully via Gmail SMTP.',
+      provider: mailRes.provider,
+      messageId: mailRes.messageId,
+      recipient: destination,
+      smtpDiagnostics: {
+        host: smtpHost,
+        port: smtpPort,
+        smtpUserConfigured: !!smtpUser,
+        smtpPasswordConfigured: !!smtpPass,
+        smtpConnection: 'SUCCESS'
+      }
     });
-  } catch (err) {
-    console.error(`❌ [ADMIN TEST EMAIL FAILED]:`, err.message);
+  } catch (sendErr) {
+    console.error(`❌ [GMAIL TEST EMAIL FAILED]:`, sendErr.message);
     return res.status(500).json({
       success: false,
-      error: err.message,
-      errorCode: err.code || 'EMAIL_FAILED',
-      recipient: destination
+      error: sendErr.message,
+      errorCode: 'EMAIL_SEND_FAILED',
+      recipient: destination,
+      smtpDiagnostics: {
+        host: smtpHost,
+        port: smtpPort,
+        smtpUserConfigured: !!smtpUser,
+        smtpPasswordConfigured: !!smtpPass,
+        smtpConnection: 'FAILED'
+      }
     });
   }
 });
@@ -1286,40 +1352,6 @@ app.get('/api/admin/requests/:requestId/print', authenticateToken, async (req, r
   }
 });
 
-// Admin: Protected Test Email Endpoint (Resend HTTPS API)
-app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
-  const { recipientEmail } = req.body;
-  const target = (recipientEmail || req.user.email || 'bhcblooddonor@gmail.com').trim();
-
-  try {
-    const result = await sendEmail({
-      to: target,
-      subject: 'BHC Blood Donor – Admin System Resend API Test',
-      htmlText: `<div style="font-family: Arial, sans-serif; padding: 24px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 550px;">
-        <h2 style="color: #0a1428; margin-top: 0;">BHC Blood Donor Network</h2>
-        <p style="font-size: 14px; color: #334155;">This is a test email sent via <strong>Resend HTTPS REST API</strong> from the BHC Blood Donor Admin Portal.</p>
-        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 6px; margin: 16px 0;">
-          <p style="margin: 0; font-size: 13px; color: #166534; font-weight: bold;">✔ Resend HTTPS API Connection Status: SUCCESSFUL</p>
-        </div>
-        <p style="font-size: 11px; color: #64748b;">Timestamp: ${new Date().toISOString()}</p>
-      </div>`,
-      plainText: 'BHC Blood Donor Network Test Email via Resend HTTPS API',
-      eventName: 'TEST_EMAIL'
-    });
-
-    return res.json({
-      success: true,
-      messageId: result.messageId,
-      provider: result.provider || 'Resend'
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      errorCode: 'RESEND_DISPATCH_FAILED',
-      message: err.message || 'Failed to dispatch test email via Resend'
-    });
-  }
-});
 
 // Serve static frontend in production if built
 const frontendDistPath = path.join(__dirname, '../frontend/dist');

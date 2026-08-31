@@ -57,6 +57,41 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
   const [pdfModalRequest, setPdfModalRequest] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
+  // Gmail SMTP Test Email State
+  const [showTestEmailPanel, setShowTestEmailPanel] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testEmailStatus, setTestEmailStatus] = useState(null); // null | 'sending' | 'success' | 'error'
+  const [testEmailResult, setTestEmailResult] = useState(null);
+
+  const handleSendTestEmail = async () => {
+    const recipient = testEmailAddress.trim();
+    if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      setTestEmailStatus('error');
+      setTestEmailResult({ error: 'Please enter a valid email address.' });
+      return;
+    }
+    setTestEmailStatus('sending');
+    setTestEmailResult(null);
+    try {
+      const res = await fetch('/api/admin/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ recipientEmail: recipient })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestEmailStatus('success');
+        setTestEmailResult(data);
+      } else {
+        setTestEmailStatus('error');
+        setTestEmailResult(data);
+      }
+    } catch (err) {
+      setTestEmailStatus('error');
+      setTestEmailResult({ error: `Network error: ${err.message}` });
+    }
+  };
+
   const authHeaders = useMemo(() => ({
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`
@@ -301,8 +336,92 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
               <span>Sign Out</span>
             </button>
           )}
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white border border-amber-500 shadow-sm transition"
+            onClick={() => { setShowTestEmailPanel(p => !p); setTestEmailStatus(null); setTestEmailResult(null); }}
+          >
+            <Mail size={15} className="shrink-0" />
+            <span>Test Email</span>
+          </button>
         </div>
       </div>
+
+      {/* GMAIL SMTP TEST EMAIL PANEL */}
+      {showTestEmailPanel && (
+        <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-5 mb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Mail size={18} className="text-amber-600" />
+            <h3 className="text-sm font-bold text-slate-800">Gmail SMTP – Email Configuration Test</h3>
+            <span className="ml-auto text-xs text-slate-400">Admin only · Not visible to users</span>
+          </div>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Test Email Address</label>
+              <input
+                type="email"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                placeholder="Enter recipient email to test (e.g. yourname@gmail.com)"
+                value={testEmailAddress}
+                onChange={e => { setTestEmailAddress(e.target.value); setTestEmailStatus(null); setTestEmailResult(null); }}
+                disabled={testEmailStatus === 'sending'}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleSendTestEmail}
+              disabled={testEmailStatus === 'sending'}
+              className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-60 transition whitespace-nowrap"
+            >
+              {testEmailStatus === 'sending' ? (
+                <><Loader size={15} className="animate-spin" /> Sending…</>
+              ) : (
+                <><Send size={15} /> Send Test Email</>
+              )}
+            </button>
+          </div>
+
+          {/* Result */}
+          {testEmailStatus === 'success' && testEmailResult && (
+            <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-green-700 font-bold text-sm mb-2">
+                <CheckCircle size={16} /> Test email sent successfully
+              </div>
+              <div className="text-xs text-green-700 space-y-1">
+                <div><span className="font-semibold">Provider:</span> {testEmailResult.provider || 'Gmail SMTP'}</div>
+                <div><span className="font-semibold">Recipient:</span> {testEmailResult.recipient}</div>
+                <div><span className="font-semibold">Message ID:</span> {testEmailResult.messageId}</div>
+                {testEmailResult.smtpDiagnostics && (
+                  <div><span className="font-semibold">SMTP Connection:</span> {testEmailResult.smtpDiagnostics.smtpConnection}</div>
+                )}
+              </div>
+            </div>
+          )}
+          {testEmailStatus === 'error' && testEmailResult && (
+            <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-red-700 font-bold text-sm mb-2">
+                <AlertTriangle size={16} /> Email delivery failed
+              </div>
+              <div className="text-xs text-red-700 space-y-1">
+                <div><span className="font-semibold">Error:</span> {testEmailResult.error || testEmailResult.message || 'Unknown error'}</div>
+                {testEmailResult.errorCode && <div><span className="font-semibold">Error Code:</span> {testEmailResult.errorCode}</div>}
+                {testEmailResult.smtpDiagnostics && (
+                  <>
+                    <div><span className="font-semibold">SMTP Host:</span> {testEmailResult.smtpDiagnostics.host}</div>
+                    <div><span className="font-semibold">SMTP User Configured:</span> {testEmailResult.smtpDiagnostics.smtpUserConfigured ? 'YES' : 'NO'}</div>
+                    <div><span className="font-semibold">SMTP Password Configured:</span> {testEmailResult.smtpDiagnostics.smtpPasswordConfigured ? 'YES' : 'NO'}</div>
+                    <div><span className="font-semibold">SMTP Connection:</span> {testEmailResult.smtpDiagnostics.smtpConnection}</div>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-red-500 mt-2">
+                💡 Fix: Ensure SMTP_USER and SMTP_PASS (Gmail App Password) are set in Render Environment Variables.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ANIMATED KPI METRICS SUMMARY CARDS */}
       <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-3">
