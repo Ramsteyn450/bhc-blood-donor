@@ -132,10 +132,11 @@ app.get('/api/health/db', async (req, res) => {
 // Email Service Health & Runtime Diagnostic Endpoint
 app.get('/api/health/email', async (req, res) => {
   try {
+    const { getFromAddress, getBrevoApiKey } = require('./services/emailService');
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER || process.env.EMAIL_USER;
     const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS;
-    const brevoKey = process.env.BREVO_API_KEY;
+    const brevoKey = getBrevoApiKey();
     const resendKey = process.env.RESEND_API_KEY;
 
     const diag = await verifyEmailService();
@@ -171,9 +172,9 @@ app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
     });
   }
 
-  const { getFromAddress } = require('./services/emailService');
+  const { getFromAddress, getBrevoApiKey } = require('./services/emailService');
   const fromAddress      = getFromAddress();
-  const brevoConfigured  = !!(process.env.BREVO_API_KEY  || '').trim();
+  const brevoConfigured  = !!getBrevoApiKey();
   const resendConfigured = !!(process.env.RESEND_API_KEY || '').trim();
 
   console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | Brevo: ${brevoConfigured ? 'YES' : 'NO'} | Resend: ${resendConfigured ? 'YES' : 'NO'}`);

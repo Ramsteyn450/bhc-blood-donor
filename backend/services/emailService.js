@@ -26,6 +26,16 @@ const RESEND_API_URL = 'https://api.resend.com/emails';
 // Helpers
 // ──────────────────────────────────────────────────────────
 
+function getBrevoApiKey() {
+  return (
+    process.env.BREVO_API_KEY ||
+    process.env.Brewo_Api_Key ||
+    process.env.BREWO_API_KEY ||
+    process.env.Brevo_Api_Key ||
+    ''
+  ).trim();
+}
+
 function getFromAddress() {
   const raw = (
     process.env.EMAIL_FROM ||
@@ -46,7 +56,7 @@ function maskEmail(email) {
 // ──────────────────────────────────────────────────────────
 
 async function sendViaBrevo({ to, subject, htmlText, plainText, fromAddress, eventName }) {
-  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  const apiKey = getBrevoApiKey();
   if (!apiKey) throw new Error('BREVO_API_KEY is not set.');
 
   const senderEmail = fromAddress || 'ramachandranramachandran5944@gmail.com';
@@ -165,7 +175,7 @@ async function sendEmail({ to, subject, htmlText, plainText, eventName = 'EMAIL'
   }
 
   const fromAddress    = getFromAddress();
-  const brevoConfigured = !!(process.env.BREVO_API_KEY || '').trim();
+  const brevoConfigured = !!getBrevoApiKey();
   const resendConfigured = !!(process.env.RESEND_API_KEY || '').trim();
 
   const opts = { to: recipient, subject, htmlText, plainText, fromAddress, eventName };
@@ -195,7 +205,7 @@ async function sendEmail({ to, subject, htmlText, plainText, eventName = 'EMAIL'
 // ──────────────────────────────────────────────────────────
 
 async function verifyEmailService() {
-  const brevoKey  = (process.env.BREVO_API_KEY  || '').trim();
+  const brevoKey  = getBrevoApiKey();
   const resendKey = (process.env.RESEND_API_KEY || '').trim();
   const fromAddr  = getFromAddress();
 
@@ -313,6 +323,7 @@ module.exports = {
   verifyEmailService,
   verifySMTP,
   getFromAddress,
+  getBrevoApiKey,
   buildRequestReceivedEmail,
   buildRequestApprovedEmail,
   buildOtpEmail,
