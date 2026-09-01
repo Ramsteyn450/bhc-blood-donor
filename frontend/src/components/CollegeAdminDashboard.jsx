@@ -57,7 +57,7 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
   const [pdfModalRequest, setPdfModalRequest] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  // Gmail SMTP Test Email State
+  // Email Delivery Test State
   const [showTestEmailPanel, setShowTestEmailPanel] = useState(false);
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testEmailStatus, setTestEmailStatus] = useState(null); // null | 'sending' | 'success' | 'error'
@@ -348,21 +348,33 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
         </div>
       </div>
 
-      {/* GMAIL SMTP TEST EMAIL PANEL */}
+      {/* EMAIL DELIVERY TEST PANEL */}
       {showTestEmailPanel && (
         <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-5 mb-4">
           <div className="flex items-center gap-2 mb-4">
             <Mail size={18} className="text-amber-600" />
-            <h3 className="text-sm font-bold text-slate-800">Email Configuration Test</h3>
+            <h3 className="text-sm font-bold text-slate-800">Email Delivery Test</h3>
             <span className="ml-auto text-xs text-slate-400">Admin only · Not visible to users</span>
           </div>
+
+          {/* Resend info note */}
+          <div className="mb-3 flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+            <span className="text-blue-500 mt-0.5 text-xs">ℹ️</span>
+            <p className="text-xs text-blue-700">
+              Email is sent via <strong>Resend HTTPS API</strong>.
+              To send to any address, verify a domain at{' '}
+              <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="underline font-semibold">resend.com/domains</a>{' '}
+              and set <code className="bg-blue-100 px-1 rounded">RESEND_FROM_EMAIL</code> in Render.
+            </p>
+          </div>
+
           <div className="flex gap-3 items-end">
             <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Test Email Address</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Recipient Email Address</label>
               <input
                 type="email"
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                placeholder="Enter recipient email to test (e.g. yourname@gmail.com)"
+                placeholder="Enter recipient email (e.g. yourname@gmail.com)"
                 value={testEmailAddress}
                 onChange={e => { setTestEmailAddress(e.target.value); setTestEmailStatus(null); setTestEmailResult(null); }}
                 disabled={testEmailStatus === 'sending'}
@@ -382,41 +394,54 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
             </button>
           </div>
 
-          {/* Result */}
+          {/* Success result */}
           {testEmailStatus === 'success' && testEmailResult && (
             <div className="mt-4 bg-green-50 border border-green-200 rounded-xl p-4">
               <div className="flex items-center gap-2 text-green-700 font-bold text-sm mb-2">
                 <CheckCircle size={16} /> Test email sent successfully
               </div>
               <div className="text-xs text-green-700 space-y-1">
-                <div><span className="font-semibold">Provider:</span> {testEmailResult.provider || 'Gmail SMTP'}</div>
+                <div><span className="font-semibold">Provider:</span> {testEmailResult.provider || 'Resend'}</div>
                 <div><span className="font-semibold">Recipient:</span> {testEmailResult.recipient}</div>
                 <div><span className="font-semibold">Message ID:</span> {testEmailResult.messageId}</div>
-                {testEmailResult.smtpDiagnostics && (
-                  <div><span className="font-semibold">SMTP Connection:</span> {testEmailResult.smtpDiagnostics.smtpConnection}</div>
+                {testEmailResult.fromAddress && (
+                  <div><span className="font-semibold">Sent From:</span> {testEmailResult.fromAddress}</div>
                 )}
               </div>
             </div>
           )}
-          {testEmailStatus === 'error' && testEmailResult && (
+
+          {/* Domain/test-mode restriction (403) — shown as amber warning, not red error */}
+          {testEmailStatus === 'error' && testEmailResult?.errorCode === 'RESEND_DOMAIN_ERROR' && (
+            <div className="mt-4 bg-amber-50 border border-amber-300 rounded-xl p-4">
+              <div className="flex items-center gap-2 text-amber-700 font-bold text-sm mb-2">
+                <AlertTriangle size={16} /> Resend sender domain not verified
+              </div>
+              <div className="text-xs text-amber-800 space-y-1 mb-3">
+                <div>{testEmailResult.error}</div>
+              </div>
+              <div className="bg-amber-100 border border-amber-200 rounded-lg p-3 text-xs text-amber-900">
+                <p className="font-bold mb-1">✅ Quick Fix (works immediately):</p>
+                <p>In Render → Environment → set <code className="bg-white px-1 rounded border">RESEND_FROM_EMAIL</code> to:</p>
+                <code className="block bg-white px-2 py-1 mt-1 rounded border font-mono text-amber-800 select-all">onboarding@resend.dev</code>
+                <p className="mt-2 font-bold">OR (for production):</p>
+                <p>Verify your domain at <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="underline">resend.com/domains</a>, then set <code className="bg-white px-1 rounded border">RESEND_FROM_EMAIL</code> to your verified sender address.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Generic error */}
+          {testEmailStatus === 'error' && testEmailResult && testEmailResult.errorCode !== 'RESEND_DOMAIN_ERROR' && (
             <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
               <div className="flex items-center gap-2 text-red-700 font-bold text-sm mb-2">
                 <AlertTriangle size={16} /> Email delivery failed
               </div>
               <div className="text-xs text-red-700 space-y-1">
                 <div><span className="font-semibold">Error:</span> {testEmailResult.error || testEmailResult.message || 'Unknown error'}</div>
-                {testEmailResult.errorCode && <div><span className="font-semibold">Error Code:</span> {testEmailResult.errorCode}</div>}
-                {testEmailResult.smtpDiagnostics && (
-                  <>
-                    <div><span className="font-semibold">SMTP Host:</span> {testEmailResult.smtpDiagnostics.host}</div>
-                    <div><span className="font-semibold">SMTP User Configured:</span> {testEmailResult.smtpDiagnostics.smtpUserConfigured ? 'YES' : 'NO'}</div>
-                    <div><span className="font-semibold">SMTP Password Configured:</span> {testEmailResult.smtpDiagnostics.smtpPasswordConfigured ? 'YES' : 'NO'}</div>
-                    <div><span className="font-semibold">SMTP Connection:</span> {testEmailResult.smtpDiagnostics.smtpConnection}</div>
-                  </>
-                )}
+                {testEmailResult.errorCode && <div><span className="font-semibold">Code:</span> {testEmailResult.errorCode}</div>}
               </div>
               <p className="text-xs text-red-500 mt-2">
-                💡 Fix: Ensure <strong>RESEND_API_KEY</strong> is set in Render Environment Variables, and <strong>EMAIL_FROM</strong> is set to <code>onboarding@resend.dev</code>.
+                💡 Check that <strong>RESEND_API_KEY</strong> is set in Render Environment Variables.
               </p>
             </div>
           )}

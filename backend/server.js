@@ -158,7 +158,7 @@ app.get('/api/health/email', async (req, res) => {
   }
 });
 
-// Admin: Test Email via Resend HTTPS API
+// Admin: Test Email Delivery via Resend HTTPS API
 app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
   const { recipientEmail } = req.body;
   const destination = (recipientEmail || '').trim();
@@ -172,15 +172,18 @@ app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
   }
 
   const apiKeyConfigured = !!(process.env.RESEND_API_KEY || '').trim();
+  const { getFromAddress } = require('./services/emailService');
+  const fromAddress = getFromAddress();
+  const isTestMode = fromAddress === 'onboarding@resend.dev' || fromAddress.includes('onboarding@resend');
 
-  console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | Resend Key: ${apiKeyConfigured ? 'SET' : 'NOT SET'}`);
+  console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | From: ${fromAddress} | TestMode: ${isTestMode}`);
 
   try {
     const mailRes = await sendEmail({
       to: destination,
-      subject: 'BHC Blood Donor – Email Service Test',
+      subject: 'BHC Blood Donor – Email Delivery Test',
       htmlText: buildTestEmail(),
-      plainText: 'This is a test email from the BHC Blood Donor system.\n\nIf you received this, email configuration is working correctly.\n\nBishop Heber College\nBHC Blood Donor',
+      plainText: 'This is a test email from the BHC Blood Donor system.\n\nIf you received this, email delivery is working correctly.\n\nBishop Heber College\nBHC Blood Donor',
       eventName: 'TEST_EMAIL'
     });
 
@@ -190,15 +193,37 @@ app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
       provider: mailRes.provider,
       messageId: mailRes.messageId,
       recipient: destination,
+      fromAddress,
+      isTestMode,
       resendApiKeyConfigured: apiKeyConfigured
     });
+
   } catch (err) {
     console.error(`❌ [TEST EMAIL FAILED]:`, err.message);
+
+    // 403 = Resend domain not verified OR test-mode restriction
+    if (err.code === 'RESEND_DOMAIN_ERROR' || err.code === 'RESEND_TEST_MODE' || err.httpStatus === 403) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'RESEND_DOMAIN_ERROR',
+        error: err.message,
+        resendAccountNote: err.isDomainError
+          ? 'In Render, change RESEND_FROM_EMAIL to: onboarding@resend.dev — or verify your domain at resend.com/domains.'
+          : 'Verify a domain at resend.com/domains, then set RESEND_FROM_EMAIL in Render to send to any recipient.',
+        recipient: destination,
+        fromAddress,
+        isTestMode: true,
+        resendApiKeyConfigured: apiKeyConfigured
+      });
+    }
+
     return res.status(500).json({
       success: false,
       error: err.message,
-      errorCode: 'EMAIL_SEND_FAILED',
+      errorCode: err.code || 'EMAIL_SEND_FAILED',
       recipient: destination,
+      fromAddress,
+      isTestMode,
       resendApiKeyConfigured: apiKeyConfigured
     });
   }
