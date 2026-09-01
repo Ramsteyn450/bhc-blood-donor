@@ -158,7 +158,7 @@ app.get('/api/health/email', async (req, res) => {
   }
 });
 
-// Admin: Test Email Delivery via Resend HTTPS API
+// Admin: Test Email Delivery (Brevo primary, Resend fallback)
 app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
   const { recipientEmail } = req.body;
   const destination = (recipientEmail || '').trim();
@@ -171,49 +171,61 @@ app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
     });
   }
 
-  const apiKeyConfigured = !!(process.env.RESEND_API_KEY || '').trim();
   const { getFromAddress } = require('./services/emailService');
-  const fromAddress = getFromAddress();
-  const isTestMode = fromAddress === 'onboarding@resend.dev' || fromAddress.includes('onboarding@resend');
+  const fromAddress      = getFromAddress();
+  const brevoConfigured  = !!(process.env.BREVO_API_KEY  || '').trim();
+  const resendConfigured = !!(process.env.RESEND_API_KEY || '').trim();
 
-  console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | From: ${fromAddress} | TestMode: ${isTestMode}`);
+  console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | Brevo: ${brevoConfigured ? 'YES' : 'NO'} | Resend: ${resendConfigured ? 'YES' : 'NO'}`);
 
   try {
     const mailRes = await sendEmail({
-      to: destination,
-      subject: 'BHC Blood Donor – Email Delivery Test',
-      htmlText: buildTestEmail(),
-      plainText: 'This is a test email from the BHC Blood Donor system.\n\nIf you received this, email delivery is working correctly.\n\nBishop Heber College\nBHC Blood Donor',
+      to:        destination,
+      subject:   'BHC Blood Donor – Email Delivery Test',
+      htmlText:  buildTestEmail(),
+      plainText: 'This is a test email from BHC Blood Donor.\n\nIf you received this, email delivery is working correctly.\n\nBishop Heber College\nBHC Blood Donor',
       eventName: 'TEST_EMAIL'
     });
 
     return res.json({
       success: true,
-      message: 'Test email sent successfully.',
-      provider: mailRes.provider,
+      message: `Test email sent successfully via ${mailRes.provider}.`,
+      provider:  mailRes.provider,
       messageId: mailRes.messageId,
       recipient: destination,
       fromAddress,
-      isTestMode,
-      resendApiKeyConfigured: apiKeyConfigured
+      brevoConfigured,
+      resendConfigured
     });
 
   } catch (err) {
     console.error(`❌ [TEST EMAIL FAILED]:`, err.message);
 
-    // 403 = Resend domain not verified OR test-mode restriction
-    if (err.code === 'RESEND_DOMAIN_ERROR' || err.code === 'RESEND_TEST_MODE' || err.httpStatus === 403) {
+    // Brevo sender not verified
+    if (err.code === 'BREVO_SENDER_NOT_VERIFIED') {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'BREVO_SENDER_NOT_VERIFIED',
+        error: err.message,
+        fix: 'Go to Brevo Dashboard → Senders & IP → Add a Sender → enter your EMAIL_FROM address → click the verification link sent to that email.',
+        recipient: destination,
+        fromAddress,
+        brevoConfigured,
+        resendConfigured
+      });
+    }
+
+    // Resend domain not verified
+    if (err.code === 'RESEND_DOMAIN_ERROR' || err.httpStatus === 403) {
       return res.status(403).json({
         success: false,
         errorCode: 'RESEND_DOMAIN_ERROR',
         error: err.message,
-        resendAccountNote: err.isDomainError
-          ? 'In Render, change RESEND_FROM_EMAIL to: onboarding@resend.dev — or verify your domain at resend.com/domains.'
-          : 'Verify a domain at resend.com/domains, then set RESEND_FROM_EMAIL in Render to send to any recipient.',
+        fix: 'Set EMAIL_FROM to onboarding@resend.dev in Render, or verify your domain at resend.com/domains.',
         recipient: destination,
         fromAddress,
-        isTestMode: true,
-        resendApiKeyConfigured: apiKeyConfigured
+        brevoConfigured,
+        resendConfigured
       });
     }
 
@@ -223,8 +235,8 @@ app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
       errorCode: err.code || 'EMAIL_SEND_FAILED',
       recipient: destination,
       fromAddress,
-      isTestMode,
-      resendApiKeyConfigured: apiKeyConfigured
+      brevoConfigured,
+      resendConfigured
     });
   }
 });
