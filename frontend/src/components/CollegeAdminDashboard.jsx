@@ -353,7 +353,7 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
         <div className="bg-white border border-amber-200 rounded-2xl shadow-lg p-5 mb-4">
           <div className="flex items-center gap-2 mb-4">
             <Mail size={18} className="text-amber-600" />
-            <h3 className="text-sm font-bold text-slate-800">Gmail SMTP – Email Configuration Test</h3>
+            <h3 className="text-sm font-bold text-slate-800">Email Configuration Test</h3>
             <span className="ml-auto text-xs text-slate-400">Admin only · Not visible to users</span>
           </div>
           <div className="flex gap-3 items-end">
@@ -416,7 +416,7 @@ export default function CollegeAdminDashboard({ token, user, onLogout }) {
                 )}
               </div>
               <p className="text-xs text-red-500 mt-2">
-                💡 Fix: Ensure SMTP_USER and SMTP_PASS (Gmail App Password) are set in Render Environment Variables.
+                💡 Fix: Ensure <strong>RESEND_API_KEY</strong> is set in Render Environment Variables, and <strong>EMAIL_FROM</strong> is set to <code>onboarding@resend.dev</code>.
               </p>
             </div>
           )}

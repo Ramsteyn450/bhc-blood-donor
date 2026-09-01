@@ -17,7 +17,8 @@ const cloudinary = require('cloudinary').v2;
 const db = require('./database');
 const { saveRequestToBackup } = require('./services/backupService');
 const { BloodRequest, Hospital, Admin, AuditLog, getNextRequestId } = require('./services/mongoService');
-const { sendEmail, verifyEmailService, verifySMTP } = require('./services/emailService');
+const { sendEmail, verifyEmailService, verifySMTP, buildTestEmail, buildRequestReceivedEmail, buildRequestApprovedEmail, buildOtpEmail } = require('./services/emailService');
+
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -157,122 +158,52 @@ app.get('/api/health/email', async (req, res) => {
   }
 });
 
-// Admin: Protected Gmail SMTP Test Email Endpoint
+// Admin: Test Email via Resend HTTPS API
 app.post('/api/admin/test-email', authenticateToken, async (req, res) => {
   const { recipientEmail } = req.body;
-  const destination = (recipientEmail || process.env.SMTP_USER || '').trim();
+  const destination = (recipientEmail || '').trim();
 
-  if (!destination) {
+  if (!destination || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
     return res.status(400).json({
       success: false,
-      error: 'No recipient email address provided.',
-      errorCode: 'NO_RECIPIENT'
+      error: 'Please enter a valid email address (e.g. example@gmail.com).',
+      errorCode: 'INVALID_RECIPIENT'
     });
   }
 
-  const smtpUser = (process.env.SMTP_USER || '').trim();
-  const smtpPass = (process.env.SMTP_PASS || '').trim();
-  const smtpHost = (process.env.SMTP_HOST || 'smtp.gmail.com').trim();
-  const smtpPort = parseInt(process.env.SMTP_PORT || '465', 10);
+  const apiKeyConfigured = !!(process.env.RESEND_API_KEY || '').trim();
 
-  console.log(`\n======================================================`);
-  console.log(`📧 [ADMIN GMAIL SMTP TEST EMAIL]`);
-  console.log(`   SMTP Host:               ${smtpHost}`);
-  console.log(`   SMTP Port:               ${smtpPort}`);
-  console.log(`   SMTP User Configured:    ${smtpUser ? 'YES' : 'NO'}`);
-  console.log(`   SMTP Password Configured: ${smtpPass ? 'YES' : 'NO'}`);
-  console.log(`   Test Recipient:          ${destination}`);
-  console.log(`======================================================\n`);
+  console.log(`\n[EMAIL] Event: TEST_EMAIL | Recipient: ${destination} | Resend Key: ${apiKeyConfigured ? 'SET' : 'NOT SET'}`);
 
-  // Step 1: Verify SMTP connection first
-  try {
-    await verifySMTP();
-    console.log('✔ [GMAIL SMTP] Connection verification passed. Proceeding to send test email...');
-  } catch (verifyErr) {
-    console.error('❌ [GMAIL SMTP] Verification FAILED:', verifyErr.message);
-    return res.status(500).json({
-      success: false,
-      error: verifyErr.message,
-      errorCode: 'SMTP_VERIFICATION_FAILED',
-      smtpDiagnostics: {
-        host: smtpHost,
-        port: smtpPort,
-        smtpUserConfigured: !!smtpUser,
-        smtpPasswordConfigured: !!smtpPass,
-        smtpConnection: 'FAILED'
-      }
-    });
-  }
-
-  // Step 2: Send the test email
   try {
     const mailRes = await sendEmail({
       to: destination,
       subject: 'BHC Blood Donor – Email Service Test',
-      htmlText: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
-          <div style="background-color: #0a1428; padding: 20px; text-align: center; border-bottom: 3px solid #d4af37;">
-            <h1 style="color: #ffffff; font-size: 18px; margin: 0;">Bishop Heber College</h1>
-            <p style="color: #d4af37; font-size: 10px; margin: 4px 0 0; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Network</p>
-          </div>
-          <div style="padding: 28px; background: #fff;">
-            <h2 style="color: #16a34a; font-size: 16px; margin-top: 0;">✔ Gmail Email Service Test</h2>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">
-              This is a test email from the BHC Blood Donor system.
-            </p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">
-              If you received this email, Gmail SMTP configuration is working correctly.
-            </p>
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 14px; border-radius: 8px; margin: 16px 0;">
-              <p style="margin: 0; font-size: 13px; color: #166534; font-weight: bold;">✔ Gmail SMTP Connection: SUCCESS</p>
-              <p style="margin: 4px 0 0; font-size: 12px; color: #166534;">Timestamp: ${new Date().toISOString()}</p>
-            </div>
-            <p style="font-size: 14px; color: #334155; margin-top: 24px;">
-              Bishop Heber College<br>
-              <strong>BHC Blood Donor</strong>
-            </p>
-          </div>
-          <div style="background: #f1f5f9; padding: 12px; text-align: center; font-size: 11px; color: #64748b;">
-            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
-          </div>
-        </div>
-      `,
-      plainText: `This is a test email from the BHC Blood Donor system.\n\nIf you received this email, Gmail SMTP configuration is working correctly.\n\nBishop Heber College\nBHC Blood Donor`,
+      htmlText: buildTestEmail(),
+      plainText: 'This is a test email from the BHC Blood Donor system.\n\nIf you received this, email configuration is working correctly.\n\nBishop Heber College\nBHC Blood Donor',
       eventName: 'TEST_EMAIL'
     });
 
-    console.log(`✔ [GMAIL TEST EMAIL SUCCESS] MessageID: ${mailRes.messageId} | Recipient: ${destination}`);
     return res.json({
       success: true,
-      message: 'Test email sent successfully via Gmail SMTP.',
+      message: 'Test email sent successfully.',
       provider: mailRes.provider,
       messageId: mailRes.messageId,
       recipient: destination,
-      smtpDiagnostics: {
-        host: smtpHost,
-        port: smtpPort,
-        smtpUserConfigured: !!smtpUser,
-        smtpPasswordConfigured: !!smtpPass,
-        smtpConnection: 'SUCCESS'
-      }
+      resendApiKeyConfigured: apiKeyConfigured
     });
-  } catch (sendErr) {
-    console.error(`❌ [GMAIL TEST EMAIL FAILED]:`, sendErr.message);
+  } catch (err) {
+    console.error(`❌ [TEST EMAIL FAILED]:`, err.message);
     return res.status(500).json({
       success: false,
-      error: sendErr.message,
+      error: err.message,
       errorCode: 'EMAIL_SEND_FAILED',
       recipient: destination,
-      smtpDiagnostics: {
-        host: smtpHost,
-        port: smtpPort,
-        smtpUserConfigured: !!smtpUser,
-        smtpPasswordConfigured: !!smtpPass,
-        smtpConnection: 'FAILED'
-      }
+      resendApiKeyConfigured: apiKeyConfigured
     });
   }
 });
+
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -771,54 +702,20 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     console.log(`Expiration: 10 Minutes (${new Date(expiresAt).toLocaleTimeString('en-IN')})`);
     console.log(`======================================================\n`);
 
-    // 4. Dispatch Email via Multi-Provider Email Service (Brevo / Resend / SendGrid / SMTP)
-    let mailDispatched = false;
-    let mailErrorDetails = null;
-
+    // 4. Dispatch OTP Email via Resend HTTPS API
     try {
-      const htmlText = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-          <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #d4af37;">
-            <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
-            <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 12px; font-weight: bold; text-transform: uppercase;">BHC Blood Donor Administrator Security</p>
-          </div>
-          <div style="padding: 32px; color: #1e293b;">
-            <h2 style="margin-top: 0; color: #0f172a; font-size: 18px;">Admin Password Reset Request</h2>
-            <p style="font-size: 14px; line-height: 1.6; color: #475569;">
-              We received a request to reset the password for your College Administrator account (<strong>${email}</strong>).
-            </p>
-            <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
-              <span style="font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; font-weight: bold; display: block; margin-bottom: 8px;">Your 6-Digit Verification Code</span>
-              <span style="font-family: monospace; font-size: 34px; font-weight: bold; color: #0a1428; letter-spacing: 8px;">${recoveryOtp}</span>
-            </div>
-            <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
-              <strong>Note:</strong> This verification code will expire in <strong>10 minutes</strong>. If you did not request a password reset, please ignore this message.
-            </p>
-          </div>
-          <div style="background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
-            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
-          </div>
-        </div>
-      `;
-
-      const result = await sendEmail({
+      await sendEmail({
         to: email,
         subject: 'BHC Blood Donor – Admin Password Reset Verification Code',
-        htmlText
+        htmlText: buildOtpEmail({ email, otp: recoveryOtp }),
+        plainText: `BHC Blood Donor – Password Reset\n\nYour 6-digit verification code: ${recoveryOtp}\n\nThis code expires in 10 minutes.`,
+        eventName: 'OTP_RESET'
       });
-
-      if (result && result.success) {
-        mailDispatched = true;
-      }
     } catch (mailErr) {
-      mailErrorDetails = mailErr.message;
-      console.error(`❌ [EMAIL DISPATCH ERROR]: Failed to send to ${email}:`, mailErr);
-    }
-
-    if (!mailDispatched) {
+      console.error(`❌ [OTP EMAIL FAILED]: ${mailErr.message}`);
       return res.status(500).json({
         success: false,
-        message: `Failed to send email to ${email}: ${mailErrorDetails || 'No email provider configured or active.'}`
+        message: `Failed to send OTP email: ${mailErr.message}`
       });
     }
 
@@ -1186,103 +1083,45 @@ app.put('/api/admin/requests/:requestId/status', authenticateToken, async (req, 
       });
     }
 
-    // 3. BUILD EMAIL & ATTEMPT SENDING
+    // 3. BUILD EMAIL USING TEMPLATE BUILDERS
     let emailSubject = '';
     let emailHtml = '';
     let emailPlain = '';
+    const relativeName = (request.relative_name || 'Sir/Madam').trim();
 
     if (finalStatus === 'Request Received' || finalStatus === 'REQUEST_RECEIVED') {
       emailSubject = 'BHC Blood Donor – Request Received';
-      emailPlain = `Dear Sir/Madam,\n\nYour blood request has been successfully received by the Bishop Heber College Blood Donor Team.\n\nPlease note that your request has been received but has NOT yet been approved.\n\nOur College Administration will verify the submitted details.\n\nIf everything is valid, the request will be processed through the existing NSS blood donation procedure.\n\nOnce a student volunteer is available, you will be contacted using the mobile number you provided.\n\nCollege Working Hours:\nMonday – Friday\n10:00 AM – 4:00 PM\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+      emailHtml = buildRequestReceivedEmail({ relativeName, requestId });
+      emailPlain = `Dear ${relativeName},\n\nYour blood request has been received by Bishop Heber College.\n\nPlease note that this does NOT mean the request has been approved yet.\n\nOnce a suitable student donor is available and the request is approved, the student/college coordinator will contact you.\n\nResponse time: 10:00 AM – 4:00 PM\nStudent donors participate voluntarily based on their availability.\n\nThank you for contacting Bishop Heber College Blood Donor Network.\n\nRequest ID: REQ-${requestId}\n\nBishop Heber College\nTiruchirappalli`;
 
-      emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-          <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #d4af37;">
-            <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
-            <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
-          </div>
-          <div style="padding: 28px; color: #1e293b;">
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been successfully received by the Bishop Heber College Blood Donor Team.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that your request has been received but has <strong>NOT yet been approved</strong>.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Our College Administration will verify the submitted details.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">If everything is valid, the request will be processed through the existing NSS blood donation procedure.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Once a student volunteer is available, you will be contacted using the mobile number you provided.</p>
-            
-            <div style="background-color: #f8fafc; border-left: 4px solid #0a1428; padding: 14px; margin: 20px 0; border-radius: 6px; border: 1px solid #e2e8f0;">
-              <p style="margin: 0; font-size: 12px; font-weight: bold; color: #0a1428; text-transform: uppercase;">College Working Hours:</p>
-              <p style="margin: 4px 0 0 0; font-size: 13px; color: #475569; font-weight: 500;">Monday – Friday<br>10:00 AM – 4:00 PM</p>
-            </div>
-
-            <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
-              Thank you,<br>
-              <strong>BHC Blood Donor</strong><br>
-              Bishop Heber College (Autonomous)
-            </p>
-          </div>
-          <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
-            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
-          </div>
-        </div>
-      `;
     } else if (finalStatus === 'APPROVED' || finalStatus === 'Approved') {
       emailSubject = 'BHC Blood Donor – Request Approved';
-      emailPlain = `Dear Sir/Madam,\n\nYour blood request has been approved by the College Administration.\n\nThe request has now been forwarded through the College NSS process.\n\nStudent volunteers will be informed through the existing college procedure.\n\nIf any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.\n\nPlease note that blood donation depends on student availability and willingness.\n\nThank you for your patience.\n\nRegards,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
+      emailHtml = buildRequestApprovedEmail({ relativeName, requestId });
+      emailPlain = `Dear ${relativeName},\n\nYour blood request has been approved.\nA student donor or college coordinator will contact you shortly.\n\nRequest ID: REQ-${requestId}\n\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
 
-      emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-          <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #16a34a;">
-            <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
-            <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
-          </div>
-          <div style="padding: 28px; color: #1e293b;">
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Your blood request has been <strong>approved by the College Administration</strong>.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">The request has now been forwarded through the College NSS process.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Student volunteers will be informed through the existing college procedure.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">If any student is willing and eligible to donate blood, they will contact you directly using your registered mobile number.</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Please note that blood donation depends on student availability and willingness.</p>
-
-            <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
-              Thank you for your patience.<br><br>
-              Regards,<br>
-              <strong>BHC Blood Donor</strong><br>
-              Bishop Heber College (Autonomous)
-            </p>
-          </div>
-          <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
-            © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
-          </div>
-        </div>
-      `;
     } else if (finalStatus.startsWith('REJECTED')) {
       emailSubject = 'BHC Blood Donor – Request Status Update';
       const reasonText = rejectionReason ? `\nReason: ${rejectionReason}` : '';
-      emailPlain = `Dear Sir/Madam,\n\nWe regret to inform you that your blood request [REQ-${requestId}] could not be approved at this time.${reasonText}\n\nFor urgent blood requirements, please contact nearby regional blood banks or district medical centers directly.\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
-
+      emailPlain = `Dear ${relativeName},\n\nWe regret to inform you that your blood request [REQ-${requestId}] could not be approved at this time.${reasonText}\n\nFor urgent blood requirements, please contact nearby regional blood banks or district medical centers directly.\n\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
       emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff;">
-          <div style="background-color: #0a1428; color: #ffffff; padding: 24px; text-align: center; border-bottom: 3px solid #dc2626;">
-            <h1 style="margin: 0; font-size: 20px; font-family: Georgia, serif;">BISHOP HEBER COLLEGE</h1>
-            <p style="margin: 4px 0 0 0; color: #d4af37; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">BHC Blood Donor Emergency Network</p>
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;background:#fff;">
+          <div style="background:#0a1428;color:#fff;padding:24px;text-align:center;border-bottom:3px solid #dc2626;">
+            <h1 style="margin:0;font-size:20px;font-family:Georgia,serif;">BISHOP HEBER COLLEGE</h1>
+            <p style="margin:4px 0 0;color:#d4af37;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:2px;">BHC Blood Donor Emergency Network</p>
           </div>
-          <div style="padding: 28px; color: #1e293b;">
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">Dear Sir/Madam,</p>
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">We regret to inform you that your emergency blood request [REQ-${requestId}] could not be approved at this time.</p>
-            ${rejectionReason ? `<div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 14px; margin: 20px 0; border-radius: 6px;"><p style="margin: 0; font-size: 12px; font-weight: bold; color: #991b1b;">Reason for Rejection:</p><p style="margin: 4px 0 0 0; font-size: 13px; color: #7f1d1d;">${rejectionReason}</p></div>` : ''}
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">For urgent requirements, please contact nearby regional blood banks or government hospital blood units directly.</p>
-            <p style="font-size: 14px; color: #334155; margin-top: 24px; line-height: 1.6;">
-              Regards,<br>
-              <strong>BHC Blood Donor</strong><br>
-              Bishop Heber College (Autonomous)
-            </p>
+          <div style="padding:28px;color:#1e293b;">
+            <p style="font-size:14px;color:#334155;line-height:1.6;">Dear ${relativeName},</p>
+            <p style="font-size:14px;color:#334155;line-height:1.6;">We regret to inform you that your blood request [REQ-${requestId}] could not be approved at this time.</p>
+            ${rejectionReason ? `<div style="background:#fef2f2;border-left:4px solid #dc2626;padding:14px;margin:20px 0;border-radius:6px;"><p style="margin:0;font-size:12px;font-weight:bold;color:#991b1b;">Reason:</p><p style="margin:4px 0 0;font-size:13px;color:#7f1d1d;">${rejectionReason}</p></div>` : ''}
+            <p style="font-size:14px;color:#334155;line-height:1.6;">For urgent requirements, please contact nearby blood banks directly.</p>
+            <p style="font-size:14px;color:#334155;margin-top:24px;line-height:1.6;">Regards,<br><strong>BHC Blood Donor</strong><br>Bishop Heber College (Autonomous)</p>
           </div>
-          <div style="background-color: #f1f5f9; padding: 14px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0;">
+          <div style="background:#f1f5f9;padding:14px;text-align:center;font-size:11px;color:#64748b;border-top:1px solid #e2e8f0;">
             © Bishop Heber College (Autonomous) · Tiruchirappalli, Tamil Nadu, India
           </div>
-        </div>
-      `;
+        </div>`;
     }
+      emailPlain = `Dear Sir/Madam,\n\nYour blood request has been successfully received by the Bishop Heber College Blood Donor Team.\n\nPlease note that your request has been received but has NOT yet been approved.\n\nOur College Administration will verify the submitted details.\n\nIf everything is valid, the request will be processed through the existing NSS blood donation procedure.\n\nOnce a student volunteer is available, you will be contacted using the mobile number you provided.\n\nCollege Working Hours:\nMonday – Friday\n10:00 AM – 4:00 PM\n\nThank you,\nBHC Blood Donor\nBishop Heber College (Autonomous)`;
 
     try {
       const emailEventName = finalStatus.startsWith('REJECTED') ? 'REJECTED' : (finalStatus === 'APPROVED' || finalStatus === 'Approved' ? 'APPROVED' : 'REQUEST_RECEIVED');
