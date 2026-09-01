@@ -7,19 +7,30 @@ services:
     buildCommand: npm install --prefix backend && npm install --include=dev --prefix frontend && npm run build --prefix frontend
     startCommand: node backend/server.js
     envVars:
-      - key: PORT
-        value: 10000
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
         value: https://bhc-blood-donor.onrender.com
-      - key: BREVO_API_KEY
+      # Gmail SMTP (set values in Render Dashboard)
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_SECURE
+        value: "true"
+      - key: SMTP_USER
         sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Resend HTTPS API (fallback for Render Free SMTP port block)
       - key: RESEND_API_KEY
+        sync: false
+      # Optional fallback providers
+      - key: BREVO_API_KEY
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
-      - key: EMAIL_FROM
-        value: '"BHC Blood Donor" <cs255214307@bhc.edu.in>'

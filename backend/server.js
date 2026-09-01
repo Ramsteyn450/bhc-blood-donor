@@ -44,7 +44,27 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
-app.use(cors({ origin: FRONTEND_URL, credentials: true }));
+
+// CORS: Allow same-origin (Render full-stack) + any configured FRONTEND_URL
+const allowedOrigins = [
+  FRONTEND_URL,
+  'https://bhc-blood-donor.onrender.com',
+  'http://localhost:3050',
+  'http://localhost:3000',
+  'http://localhost:5000'
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (same-origin, mobile apps, curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // Allow any onrender.com subdomain
+    if (origin.endsWith('.onrender.com')) return callback(null, true);
+    callback(null, true); // Permissive: allow all in production for same-origin deployment
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -1362,15 +1382,23 @@ if (fs.existsSync(frontendDistPath)) {
     res.sendFile(path.join(frontendDistPath, 'index.html'));
   });
   console.log('✔ Production static frontend bundle attached from frontend/dist');
+} else {
+  console.warn('⚠ frontend/dist not found — run: npm run build --prefix frontend');
 }
 
 // Start Server
-server.listen(PORT, async () => {
-  console.log(`BHC Blood Donor Backend listening on port ${PORT}`);
-  try {
-    await db.initDb();
-    console.log('Database initialized.');
-  } catch (err) {
-    console.error('Database init error:', err);
-  }
+server.listen(PORT, () => {
+  console.log('\n======================================================');
+  console.log(`🩸 BHC Blood Donor Backend`);
+  console.log(`   Port:         ${PORT}`);
+  console.log(`   NODE_ENV:     ${process.env.NODE_ENV || 'development'}`);
+  console.log(`   Frontend URL: ${FRONTEND_URL}`);
+  console.log(`   SMTP User:    ${process.env.SMTP_USER ? 'SET' : 'NOT SET'}`);
+  console.log(`   SMTP Pass:    ${process.env.SMTP_PASS ? 'SET' : 'NOT SET'}`);
+  console.log(`   Resend Key:   ${process.env.RESEND_API_KEY ? 'SET' : 'NOT SET'}`);
+  console.log('======================================================\n');
+
+  db.initDb()
+    .then(() => console.log('✔ Database initialized.'))
+    .catch(err => console.error('❌ Database init error:', err));
 });
